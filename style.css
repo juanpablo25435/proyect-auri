@@ -1427,72 +1427,14 @@ button:focus-visible {
 
 
 /* =============================================
-   ZONA INFERIOR – Respuestas rápidas y PTT
+   ZONA INFERIOR – PTT (Push-to-Talk)
    -----------------------------------------------
-   Bloque BEM: .respuestas-rapidas
-   Elemento:   .respuestas-rapidas__btn
-   Modificador:.respuestas-rapidas__btn--activo
    Bloque BEM: .ptt-contenedor
    Bloque BEM: .ptt-btn
    Elementos:  .ptt-btn__icono
                .ptt-btn__etiqueta
    Modificador:.ptt-btn--grabando
 ============================================== */
-.app-pie {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--espacio-md);
-  padding: var(--espacio-md) var(--espacio-lg) var(--espacio-lg);
-}
-
-/* Chips de respuesta rápida: compactos dentro del dispositivo */
-.respuestas-rapidas {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px;
-}
-
-/*
-  Chip de respuesta rápida integrado en el dispositivo físico.
-  Versión compacta que cabe dentro del colgante (240px ancho).
-  El área táctil mínima se logra con padding vertical generoso.
-*/
-.respuestas-rapidas__btn {
-  padding: 6px 10px;
-  min-height: 30px;
-  border-radius: var(--radio-pastilla);
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  color: var(--color-texto-secundario);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  transition:
-    background-color var(--transicion-base),
-    border-color     var(--transicion-base),
-    color            var(--transicion-base),
-    transform        var(--transicion-base);
-}
-
-.respuestas-rapidas__btn:hover {
-  background-color: rgba(255, 255, 255, 0.10);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: var(--color-texto-primario);
-  transform: translateY(-1px);
-}
-
-.respuestas-rapidas__btn:active {
-  transform: translateY(0);
-}
-
-/* Modificador: chip activo tras ser pulsado (feedback visual temporal) */
-.respuestas-rapidas__btn--activo {
-  background-color: rgba(74, 144, 164, 0.20);
-  border-color: var(--color-acento);
-  color: #8dd4e8;
-}
 
 /*
   ─── BOTÓN PTT – COMPONENTE FÍSICO TÁCTIL ──────────────

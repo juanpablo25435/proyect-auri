@@ -55,7 +55,6 @@ const muteBtn        = document.getElementById('mute-btn');
 const volumeSlider   = document.getElementById('volume-slider');
 const speechLangSelect = document.getElementById('speech-lang');
 const pttBtn         = document.getElementById('ptt-btn');
-const triggerBtns    = document.querySelectorAll('.respuestas-rapidas__btn');
 // Controles de la App Compañera (también accedidos por _setUIEsperando)
 const chatInput      = document.getElementById('chat-input');
 const btnEnviarChat  = document.getElementById('btn-enviar-chat');
@@ -309,16 +308,21 @@ function _inicializarReconocimiento() {
     if (label) label.textContent = 'Hablar';
 
     const textoFinal = _acumuladoTranscripcion.trim();
-    if (_enviarAlDetener && textoFinal && !_peticionEnCurso) {
-      _enviarAlDetener = false;
-      _acumuladoTranscripcion = '';
-      _añadirBurbujaChat('usuario', textoFinal);
+
+    // Resetea las banderas ANTES de la llamada async para que cualquier
+    // evento 'end' residual o pointerup fantasma encuentre el estado limpio
+    // y no reenvíe el mismo texto una segunda vez.
+    _enviarAlDetener = false;
+    _acumuladoTranscripcion = '';
+
+    if (textoFinal && !_peticionEnCurso) {
+      // procesarEntradaUsuario() se encarga de añadir la burbuja del usuario
+      // internamente (_añadirBurbujaChat es llamado dentro de esa función).
+      // No se llama aquí para evitar la burbuja duplicada.
       procesarEntradaUsuario(textoFinal);
       return;
     }
 
-    _enviarAlDetener = false;
-    _acumuladoTranscripcion = '';
     if (estadoAuri) estadoAuri.textContent = 'AURI te escucha';
   });
 
@@ -964,7 +968,6 @@ function _manejarErrorAPI(err, tipo = 'red') {
 function _setUIEsperando(esperando) {
   // ── Controles del wearable ─────────────────────────────────────────
   pttBtn.disabled = esperando;
-  triggerBtns.forEach(b => { b.disabled = esperando; });
 
   // ── Controles de la app compañera ──────────────────────────────────
   // Se bloquean aunque #vista-app no sea la vista activa,
@@ -994,25 +997,6 @@ function _setUIEsperando(esperando) {
 }
 
 
-// ─────────────────────────────────────────────
-// 5. INTERACCIONES – QUICK TRIGGERS
-// ─────────────────────────────────────────────
-
-triggerBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const texto = btn.textContent.trim();
-    const trigger = btn.dataset.trigger;
-
-    console.log(`Quick Trigger activado: "${texto}" [${trigger}]`);
-
-    // Feedback visual: marca el botón activo y lo limpia al terminar
-    triggerBtns.forEach(b => b.classList.remove('respuestas-rapidas__btn--activo'));
-    btn.classList.add('respuestas-rapidas__btn--activo');
-    setTimeout(() => btn.classList.remove('respuestas-rapidas__btn--activo'), 2000);
-
-    procesarEntradaUsuario(texto);
-  });
-});
 
 
 // ─────────────────────────────────────────────
