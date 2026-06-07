@@ -1,8 +1,9 @@
-# Credenciales y variables de entorno (CRÍTICO)
+# Credenciales y variables de entorno (CRÍTICO – NUNCA subir al repo)
 .env
 .env.local
 config.js
 keys.js
+env.js
 
 # Archivos del sistema operativo
 .DS_Store

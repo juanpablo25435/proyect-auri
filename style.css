@@ -1,0 +1,1678 @@
+/* =============================================
+   TOKENS DE DISEÑO (variables globales)
+   Centralizan toda la paleta, tipografía y
+   espaciado del sistema. Cambiar un token aquí
+   propaga el cambio a toda la interfaz.
+============================================== */
+:root {
+  /* Paleta base – fondo nocturno sereno */
+  --color-fondo:           #1a1f2e;
+  --color-fondo-superficie:#222840;
+  --color-fondo-elevado:   #2a3150;
+
+  /* Textos */
+  --color-texto-primario:  #f0ede8;
+  --color-texto-secundario:#b0aaa0;
+  --color-texto-oscuro:    #1c1c2a;
+
+  /* Acento – botón principal de aceptar */
+  --color-acento:          #4a90a4;
+  --color-acento-hover:    #5aa8be;
+  --color-acento-activo:   #3a7a8e;
+
+  /* Fondo y borde de botones de respuesta rápida */
+  --color-trigger-fondo:   rgba(255, 255, 255, 0.07);
+  --color-trigger-borde:   rgba(255, 255, 255, 0.14);
+  --color-trigger-hover:   rgba(255, 255, 255, 0.13);
+
+  /* Sol – tamaño base */
+  --sol-nucleo-tamano:     160px;
+
+  /* ─── ESTADO NEUTRAL – amarillo suave, calma ─── */
+  --neutral-a:             #fff4b0;
+  --neutral-b:             #f9c84a;
+  --neutral-c:             #f4a832;
+  --neutral-d:             #e87c1e;
+  --neutral-brillo:
+    0 0  40px 12px rgba(249, 200,  74, 0.45),
+    0 0  90px 30px rgba(244, 168,  50, 0.22),
+    0 0 180px 60px rgba(232, 124,  30, 0.10);
+  --neutral-vel-respirar:  4s;
+  --neutral-vel-girar:     18s;
+
+  /* ─── ESTADO ALEGRE – dorado intenso, energía ─── */
+  --alegre-a:              #fffde0;
+  --alegre-b:              #ffd700;
+  --alegre-c:              #ffa500;
+  --alegre-d:              #ff6b00;
+  --alegre-brillo:
+    0 0  55px 22px rgba(255, 215,   0, 0.80),
+    0 0 130px 60px rgba(255, 165,   0, 0.50),
+    0 0 260px 95px rgba(255, 107,   0, 0.22);
+  --alegre-vel-respirar:   2s;
+  --alegre-vel-girar:      7s;
+
+  /* ─── ESTADO TRISTE – azul desaturado frío, recogimiento ─── */
+  --triste-a:              #c8dff5;
+  --triste-b:              #4a6fa5;
+  --triste-c:              #2e4f7a;
+  --triste-d:              #1a3355;
+  --triste-brillo:
+    0 0  18px  5px rgba( 74, 111, 165, 0.28),
+    0 0  45px 14px rgba( 46,  79, 122, 0.14),
+    0 0 100px 30px rgba( 26,  51,  85, 0.07);
+  --triste-vel-respirar:   10s;
+  --triste-vel-girar:      120s;
+
+  /* ─── ESTADO SORPRENDIDO – violeta, ondas amplias ─── */
+  --sorprendido-a:         #f0d8ff;
+  --sorprendido-b:         #9b59b6;
+  --sorprendido-c:         #7d3c98;
+  --sorprendido-d:         #5b2c6f;
+  --sorprendido-brillo:
+    0 0  55px 22px rgba(155,  89, 182, 0.75),
+    0 0 130px 58px rgba(125,  60, 152, 0.45),
+    0 0 260px 95px rgba( 91,  44, 111, 0.20);
+  --sorprendido-vel-respirar: 1.8s;
+  --sorprendido-vel-girar:    6s;
+
+  /* Alias de compatibilidad – usados en animaciones base */
+  --sol-color-nucleo:      var(--neutral-b);
+  --sol-color-medio:       var(--neutral-c);
+  --sol-color-exterior:    var(--neutral-d);
+  --sol-brillo-neutral:    var(--neutral-brillo);
+
+  /* Botón PTT (push-to-talk) */
+  --color-ptt-fondo:       rgba(255, 255, 255, 0.06);
+  --color-ptt-borde:       rgba(255, 255, 255, 0.18);
+  --color-ptt-activo:      rgba( 74, 144, 164, 0.28);
+
+  /* Tipografía */
+  --fuente-familia:        'Segoe UI', system-ui, -apple-system, sans-serif;
+  --fuente-base:           18px;
+  --fuente-grande:         20px;
+  --fuente-titular:        26px;
+  --fuente-pequena:        15px;
+  --interlineado:          1.7;
+
+  /* Espaciado modular */
+  --espacio-xs:  4px;
+  --espacio-sm:  10px;
+  --espacio-md:  20px;
+  --espacio-lg:  36px;
+  --espacio-xl:  56px;
+
+  /* Radios de borde */
+  --radio-pastilla: 999px;
+  --radio-tarjeta:   20px;
+
+  /* Duraciones de transición */
+  --transicion-base:   0.25s ease;
+  --transicion-estado: 0.5s ease;
+}
+
+
+/* =============================================
+   RESET Y ESTILOS BASE
+   Elimina márgenes y rellenos del navegador
+   y establece el modelo de caja universal.
+============================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: var(--fuente-base);
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--fuente-familia);
+  background-color: var(--color-fondo);
+  color: var(--color-texto-primario);
+  line-height: var(--interlineado);
+  min-height: 100dvh;
+  /* Suavizado de fuentes para pantallas de alta densidad */
+  -webkit-font-smoothing: antialiased;
+  /* Evita el scroll mientras el modal está activo */
+  overflow: hidden;
+}
+
+/* Hereda la fuente en todos los botones */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* Anillo de foco visible para navegación por teclado (accesibilidad) */
+button:focus-visible {
+  outline: 3px solid var(--color-acento);
+  outline-offset: 3px;
+}
+
+
+/* =============================================
+   MODAL DE BIENVENIDA Y CONSENTIMIENTO
+   -----------------------------------------------
+   Bloque BEM: .modal-overlay
+   Elemento:   .modal-card
+   Elementos:  .modal-card__titulo
+               .modal-card__descripcion
+               .modal-card__emergencia
+               .modal-card__btn
+   Modificador:.modal-overlay--hidden
+============================================== */
+
+/* Fondo oscuro con desenfoque que cubre toda la pantalla */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--espacio-md);
+  background-color: rgba(10, 12, 22, 0.82);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  /* Transición suave al ocultarse */
+  transition: opacity var(--transicion-base), visibility var(--transicion-base);
+}
+
+/* Estado oculto: app.js añade esta clase al aceptar el modal */
+.modal-overlay--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Tarjeta blanca interior del modal */
+.modal-card {
+  background-color: #faf8f5;
+  color: var(--color-texto-oscuro);
+  border-radius: var(--radio-tarjeta);
+  padding: var(--espacio-xl) var(--espacio-lg);
+  max-width: 540px;
+  width: 100%;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  /* Recibe el foco al abrir el modal (tabindex="-1" en HTML) */
+  outline: none;
+}
+
+/* Título principal del modal */
+.modal-card__titulo {
+  font-size: var(--fuente-titular);
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: #1c2340;
+}
+
+/* Párrafo de descripción / consentimiento informado */
+.modal-card__descripcion {
+  font-size: var(--fuente-grande);
+  line-height: 1.75;
+  color: #2e2e3a;
+}
+
+/* Número de emergencia resaltado en rojo de alto contraste */
+.modal-card__emergencia {
+  font-weight: 700;
+  font-size: 1.1em;
+  color: #c0392b;
+  letter-spacing: 0.5px;
+}
+
+/* Botón de aceptación – prominente, azul-verde calmante */
+.modal-card__btn {
+  align-self: stretch;
+  margin-top: var(--espacio-sm);
+  padding: 16px var(--espacio-lg);
+  border-radius: var(--radio-pastilla);
+  background-color: var(--color-acento);
+  color: #fff;
+  font-size: var(--fuente-grande);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition:
+    background-color var(--transicion-base),
+    transform          var(--transicion-base),
+    box-shadow         var(--transicion-base);
+  box-shadow: 0 4px 18px rgba(74, 144, 164, 0.45);
+}
+
+.modal-card__btn:hover {
+  background-color: var(--color-acento-hover);
+  box-shadow: 0 6px 26px rgba(90, 168, 190, 0.55);
+  transform: translateY(-1px);
+}
+
+.modal-card__btn:active {
+  background-color: var(--color-acento-activo);
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(74, 144, 164, 0.35);
+}
+
+
+/* =============================================
+   LAYOUT PRINCIPAL – CONTENEDOR SPA
+   -----------------------------------------------
+   Raíz de las dos vistas (wearable + app compañera).
+   Ocupa toda la pantalla; position: relative permite
+   el botón flotante absoluto (#btn-abrir-app).
+============================================== */
+.app-container {
+  position: relative;
+  height: 100dvh;
+  width: 100%;
+  transition: opacity var(--transicion-base);
+  overflow: hidden;
+}
+
+/* Oculto mientras el modal de consentimiento está activo */
+.app-container[aria-hidden="true"] {
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Visible una vez el usuario acepta */
+.app-container[aria-hidden="false"] {
+  opacity: 1;
+}
+
+
+/* =============================================
+   VISTA 1 – WEARABLE / COLGANTE (apariencia hardware)
+   -----------------------------------------------
+   Bloque BEM: .wearable
+   Elementos:  .wearable__cabecera
+               .wearable__dispositivo  ← nuevo: device físico
+               .wearable__cuerpo
+               .wearable__colgante
+               .wearable__estado-texto
+               .wearable__pie
+
+   El fondo oscuro del <body> actúa como la "mesa"
+   o ambiente sobre el que reposa el colgante real.
+   La sección .wearable solo centra el contenido.
+============================================== */
+
+/* Pantalla completa oscura que enmarca el dispositivo */
+.wearable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espacio-md);
+  height: 100dvh;
+  width: 100%;
+  padding: var(--espacio-md);
+  transition: opacity var(--transicion-base), transform var(--transicion-base);
+}
+
+/* Controles de audio sobre el dispositivo: compactos y centrados */
+.wearable__cabecera {
+  width: 100%;
+  max-width: 300px;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* Controles de volumen/mute más compactos en contexto wearable */
+.wearable__cabecera .controles-audio {
+  gap: var(--espacio-sm);
+  justify-content: center;
+}
+
+.wearable__cabecera .control-btn {
+  padding: 7px 12px;
+  min-height: 36px;
+  font-size: 13px;
+}
+
+.wearable__cabecera .control-volumen__slider {
+  width: 80px;
+}
+
+/*
+  ─── DISPOSITIVO FÍSICO WEARABLE ───────────────────
+  Bloque BEM: .wearable__dispositivo
+  Simula el cuerpo del colgante de hardware premium:
+
+  Capa 1 – Aro metálico exterior:   box-shadow multicapa
+  Capa 2 – Cuerpo policarbonato:     linear-gradient oscuro
+  Capa 3 – Reflejo de cristal:       ::before pseudo-element
+  Capa 4 – Bisel interior templado:  inset box-shadow
+
+  Forma: oval / gota invertida (más ancho arriba,
+  ligeramente cónico hacia la base).
+  ─────────────────────────────────────────────────────
+*/
+.wearable__dispositivo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+
+  /* Tamaño fijo pequeño del colgante físico */
+  width: 240px;
+  height: 378px;
+  padding: var(--espacio-lg) var(--espacio-md) var(--espacio-md);
+
+  /* Forma oval / gota invertida: tope más redondeado, base más cerrada */
+  border-radius: 120px 120px 100px 100px / 78px 78px 112px 112px;
+
+  /* Material: policarbonato oscuro con acabado espejo */
+  background: linear-gradient(
+    175deg,
+    #262d4a 0%,
+    #1e2442 22%,
+    #141828 58%,
+    #0e1020 100%
+  );
+
+  /* Sombras multicapa: aro metálico + volumen + bisel de cristal */
+  box-shadow:
+    /* Aro metálico exterior en tres capas de grosor decreciente */
+    0 0 0 2px  #3d4574,
+    0 0 0 4px  #28304e,
+    0 0 0 6px  #1c213a,
+    /* Sombra de profundidad volumétrica (dispositivo elevado) */
+    0 30px 74px rgba(0, 0, 0, 0.82),
+    0 12px 30px rgba(0, 0, 0, 0.62),
+    0  4px  9px rgba(0, 0, 0, 0.42),
+    /* Bisel interior: arista superior iluminada, inferior en sombra */
+    inset 0  2px 3px rgba(255, 255, 255, 0.13),
+    inset 0 -3px 7px rgba(0,   0,   0,   0.58);
+}
+
+/* Reflejo especular que simula cristal gorilla glass */
+.wearable__dispositivo::before {
+  content: '';
+  position: absolute;
+  top: 22px;
+  left: 32px;
+  width: 50px;
+  height: 112px;
+  background: linear-gradient(
+    148deg,
+    rgba(255, 255, 255, 0.09) 0%,
+    rgba(255, 255, 255, 0.03) 55%,
+    transparent 100%
+  );
+  border-radius: 50%;
+  pointer-events: none;
+  /* Se dibuja sobre el fondo pero debajo del avatar */
+  z-index: 0;
+}
+
+/* Zona central del dispositivo: centra el colgante circular */
+.wearable__cuerpo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espacio-sm);
+  flex: 1;
+  z-index: 1;
+}
+
+/*
+  Pantalla circular interna del dispositivo.
+  Simula la zona de visualización del avatar con
+  su propio bisel y fondo oscuro profundo.
+  La custom property --sol-nucleo-tamano escala
+  el avatar al tamaño del dispositivo.
+*/
+.wearable__colgante {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 154px;
+  height: 154px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    #191e3a 0%,
+    #0f1228 65%,
+    #07080f 100%
+  );
+  /* Bisel de la pantalla interna con doble anillo */
+  box-shadow:
+    0 0 0 2px #242744,
+    0 0 0 4px #181c36,
+    0 8px 26px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0,   0,   0, 0.42);
+  /* Reduce el avatar al contexto del dispositivo físico */
+  --sol-nucleo-tamano: 100px;
+  z-index: 1;
+}
+
+/* Texto de estado: micro-tipografía dentro del dispositivo */
+.wearable__estado-texto {
+  font-size: 10px;
+  color: var(--color-texto-secundario);
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  opacity: 0.55;
+  z-index: 1;
+}
+
+/* Zona inferior integrada en el hardware: respuestas + PTT */
+.wearable__pie {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  z-index: 1;
+}
+
+
+/* =============================================
+   VISTA 2 – APP COMPAÑERA (pantalla de smartphone)
+   -----------------------------------------------
+   Bloque BEM: .companion-app
+   Elementos:  .companion-app__cabecera
+               .companion-app__titulo
+               .companion-app__nombre-usuario
+               .companion-app__btn-volver
+               .companion-app__cuerpo
+               .companion-app__pie
+   Layout: 3 filas (header / 1fr / auto)
+   Oculta con [hidden]; se muestra con JS.
+
+   En móvil: pantalla completa limpia y de alto contraste.
+   En escritorio (≥ 520px): simula la pantalla de un
+   smartphone centrada con marco y sombra lateral.
+============================================== */
+.companion-app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100dvh;
+  width: 100%;
+  background-color: var(--color-fondo-superficie);
+  transition: opacity var(--transicion-base), transform var(--transicion-base);
+}
+
+/* CSS nativo [hidden] — visible cuando JS elimina el atributo */
+.companion-app[hidden] {
+  display: none;
+}
+
+/*
+  En pantallas anchas se simula la pantalla de un smartphone:
+  ancho máximo centrado con marco sutil de tipo teléfono.
+*/
+@media (min-width: 520px) {
+  .companion-app {
+    max-width: 468px;
+    margin: 0 auto;
+    /* Marco tipo smartphone: borde sutil + sombras laterales */
+    box-shadow:
+      0 0  0  1px rgba(255, 255, 255, 0.08),
+      0 0 60px    rgba(0,   0,   0,   0.58),
+      0 0 120px   rgba(0,   0,   0,   0.36);
+  }
+}
+
+/*
+  Barra de navegación de la app compañera.
+  Efecto acrylic: gradiente sutil + backdropfilter.
+*/
+.companion-app__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-sm) var(--espacio-md);
+  background: linear-gradient(
+    to bottom,
+    #2e3660 0%,
+    var(--color-fondo-elevado) 100%
+  );
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  /* Glassmorphism sutil: desenfoque de fondo */
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+}
+
+/* Título principal de la app compañera */
+.companion-app__titulo {
+  font-size: var(--fuente-grande);
+  font-weight: 700;
+  color: var(--color-texto-primario);
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Nombre del usuario leído de la memoria */
+.companion-app__nombre-usuario {
+  font-size: var(--fuente-pequena);
+  color: var(--color-acento);
+  font-weight: 600;
+}
+
+/* Botón "← Volver al Colgante" */
+.companion-app__btn-volver {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  padding: 8px 14px;
+  border-radius: var(--radio-pastilla);
+  background-color: var(--color-trigger-fondo);
+  border: 1px solid var(--color-trigger-borde);
+  color: var(--color-texto-primario);
+  font-size: var(--fuente-pequena);
+  font-weight: 500;
+  min-height: 44px;
+  transition: background-color var(--transicion-base);
+}
+
+.companion-app__btn-volver:hover {
+  background-color: var(--color-trigger-hover);
+}
+
+/* Cuerpo: historial de chat + panel de recuerdos en columnas */
+.companion-app__cuerpo {
+  display: grid;
+  /* En móvil: una sola columna (chat ocupa todo el ancho) */
+  grid-template-columns: 1fr;
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  /* En tablet/desktop: chat + panel lado a lado */
+  .companion-app__cuerpo {
+    grid-template-columns: 1fr 280px;
+  }
+}
+
+/* Pie: zona de entrada de texto con separación de alto contraste */
+.companion-app__pie {
+  padding: var(--espacio-sm) var(--espacio-md);
+  background: linear-gradient(
+    to top,
+    var(--color-fondo-elevado) 0%,
+    rgba(42, 49, 80, 0.96) 100%
+  );
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  /* Misma separación visual que la cabecera */
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+
+/* =============================================
+   HISTORIAL DE CHAT
+   -----------------------------------------------
+   Bloque BEM: .chat-historial
+   Elementos:  .chat-historial__vacio
+               .chat-burbuja--auri
+               .chat-burbuja--usuario
+============================================== */
+.chat-historial {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-md);
+  overflow-y: auto;
+  /* Scroll suave hacia el fondo cuando llegan mensajes nuevos */
+  scroll-behavior: smooth;
+}
+
+/* Mensaje de estado vacío */
+.chat-historial__vacio {
+  text-align: center;
+  color: var(--color-texto-secundario);
+  font-size: var(--fuente-pequena);
+  margin: auto;
+  padding: var(--espacio-lg);
+  opacity: 0.7;
+}
+
+/* Burbuja base compartida por los dos tipos */
+.chat-burbuja {
+  max-width: 82%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: var(--fuente-pequena);
+  line-height: 1.6;
+  word-break: break-word;
+  animation: burbuja-entrar 0.25s ease-out;
+}
+
+@keyframes burbuja-entrar {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* Burbuja de AURI – izquierda, tono oscuro empático */
+.chat-burbuja--auri {
+  align-self: flex-start;
+  background-color: var(--color-fondo-elevado);
+  color: var(--color-texto-primario);
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Burbuja del usuario – derecha, acento azul */
+.chat-burbuja--usuario {
+  align-self: flex-end;
+  background-color: var(--color-acento);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+/* Etiqueta de quién habla (accesibilidad) */
+.chat-burbuja__autor {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.65;
+  margin-bottom: 4px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+
+/* =============================================
+   ENTRADA DE TEXTO DEL CHAT
+   -----------------------------------------------
+   Bloque BEM: .chat-entrada
+   Elementos:  .chat-entrada__input
+               .chat-entrada__btn-enviar
+============================================== */
+.chat-entrada {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+}
+
+/* Campo de texto */
+.chat-entrada__input {
+  flex: 1;
+  padding: 12px 18px;
+  border-radius: var(--radio-pastilla);
+  border: 1px solid var(--color-trigger-borde);
+  background-color: var(--color-fondo);
+  color: var(--color-texto-primario);
+  font-family: var(--fuente-familia);
+  font-size: var(--fuente-pequena);
+  min-height: 48px;
+  outline: none;
+  transition: border-color var(--transicion-base);
+}
+
+.chat-entrada__input::placeholder {
+  color: var(--color-texto-secundario);
+  opacity: 0.7;
+}
+
+.chat-entrada__input:focus {
+  border-color: var(--color-acento);
+}
+
+/* Botón de enviar */
+.chat-entrada__btn-enviar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--color-acento);
+  color: #fff;
+  font-size: 1.1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color var(--transicion-base), transform var(--transicion-base);
+}
+
+.chat-entrada__btn-enviar:hover {
+  background-color: var(--color-acento-hover);
+  transform: scale(1.08);
+}
+
+.chat-entrada__btn-enviar:active {
+  transform: scale(0.96);
+}
+
+
+/* =============================================
+   PANEL DE RECUERDOS Y CONFIGURACIÓN
+   -----------------------------------------------
+   Bloque BEM: .panel-recuerdos
+   Elementos:  .panel-recuerdos__titulo
+               .panel-recuerdos__lista
+               .panel-recuerdos__item
+               .panel-recuerdos__form
+               .panel-recuerdos__label
+               .panel-recuerdos__input
+               .panel-recuerdos__textarea
+               .panel-recuerdos__btn-guardar
+               .panel-recuerdos__separador
+               .panel-recuerdos__privacidad
+               .panel-recuerdos__btn-borrar
+============================================== */
+.panel-recuerdos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+  padding: var(--espacio-md);
+  background-color: var(--color-fondo);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-y: auto;
+
+  /* En móvil el panel está oculto bajo el chat */
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .panel-recuerdos {
+    display: flex;
+  }
+}
+
+.panel-recuerdos__titulo {
+  font-size: var(--fuente-grande);
+  font-weight: 700;
+  color: var(--color-texto-primario);
+  margin-bottom: var(--espacio-xs);
+}
+
+.panel-recuerdos__subtitulo {
+  font-size: var(--fuente-pequena);
+  font-weight: 600;
+  color: var(--color-texto-secundario);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+/* Lista de recuerdos guardados */
+.panel-recuerdos__lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.panel-recuerdos__vacio {
+  font-size: var(--fuente-pequena);
+  color: var(--color-texto-secundario);
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Ítem de recuerdo individual */
+.panel-recuerdos__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--espacio-xs);
+  padding: 8px 10px;
+  background-color: var(--color-fondo-superficie);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: var(--fuente-pequena);
+}
+
+.panel-recuerdos__item-clave {
+  font-weight: 600;
+  color: var(--color-acento);
+  font-size: 12px;
+}
+
+.panel-recuerdos__item-texto {
+  color: var(--color-texto-secundario);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Formulario de nuevo recuerdo */
+.panel-recuerdos__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+}
+
+.panel-recuerdos__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-texto-secundario);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.panel-recuerdos__input,
+.panel-recuerdos__textarea {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--color-trigger-borde);
+  background-color: var(--color-fondo-superficie);
+  color: var(--color-texto-primario);
+  font-family: var(--fuente-familia);
+  font-size: var(--fuente-pequena);
+  outline: none;
+  transition: border-color var(--transicion-base);
+  resize: vertical;
+}
+
+.panel-recuerdos__input:focus,
+.panel-recuerdos__textarea:focus {
+  border-color: var(--color-acento);
+}
+
+.panel-recuerdos__input::placeholder,
+.panel-recuerdos__textarea::placeholder {
+  color: var(--color-texto-secundario);
+  opacity: 0.6;
+}
+
+/* Botón guardar recuerdo */
+.panel-recuerdos__btn-guardar {
+  padding: 10px 16px;
+  border-radius: var(--radio-pastilla);
+  background-color: var(--color-acento);
+  color: #fff;
+  font-size: var(--fuente-pequena);
+  font-weight: 600;
+  min-height: 44px;
+  transition: background-color var(--transicion-base);
+}
+
+.panel-recuerdos__btn-guardar:hover {
+  background-color: var(--color-acento-hover);
+}
+
+/* Separador visual */
+.panel-recuerdos__separador {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: var(--espacio-xs) 0;
+}
+
+/* Sección de privacidad */
+.panel-recuerdos__privacidad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-xs);
+}
+
+.panel-recuerdos__aviso {
+  font-size: 12px;
+  color: var(--color-texto-secundario);
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+/* Botón de borrar toda la memoria */
+.panel-recuerdos__btn-borrar {
+  padding: 10px 16px;
+  border-radius: var(--radio-pastilla);
+  background-color: rgba(192, 57, 43, 0.15);
+  border: 1px solid rgba(192, 57, 43, 0.35);
+  color: #e07060;
+  font-size: var(--fuente-pequena);
+  font-weight: 600;
+  min-height: 44px;
+  transition: background-color var(--transicion-base), border-color var(--transicion-base);
+}
+
+.panel-recuerdos__btn-borrar:hover {
+  background-color: rgba(192, 57, 43, 0.28);
+  border-color: rgba(192, 57, 43, 0.55);
+}
+
+
+/* =============================================
+   BOTÓN FLOTANTE – ABRIR APP / VOLVER
+   -----------------------------------------------
+   Bloque BEM: .btn-abrir-app
+   Elementos:  .btn-abrir-app__icono
+               .btn-abrir-app__etiqueta
+   Posicionado en esquina inferior derecha,
+   fuera del flujo de ambas vistas.
+============================================== */
+.btn-abrir-app {
+  position: fixed;
+  bottom: calc(var(--espacio-lg) + 80px); /* sobre el botón PTT */
+  right: var(--espacio-lg);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: var(--radio-pastilla);
+  background-color: var(--color-fondo-elevado);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--color-texto-primario);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition:
+    background-color var(--transicion-base),
+    transform        var(--transicion-base),
+    box-shadow       var(--transicion-base);
+}
+
+.btn-abrir-app:hover {
+  background-color: var(--color-acento);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(74, 144, 164, 0.40);
+}
+
+.btn-abrir-app:active {
+  transform: translateY(0);
+}
+
+/* Modificador: cuando ya estamos en la app, el botón indica "cerrar" */
+.btn-abrir-app--en-app {
+  background-color: rgba(74, 144, 164, 0.18);
+  border-color: var(--color-acento);
+}
+
+.btn-abrir-app__icono {
+  font-size: 1.4em;
+  line-height: 1;
+}
+
+.btn-abrir-app__etiqueta {
+  line-height: 1;
+}
+
+
+/* =============================================
+   CABECERA – Controles de audio
+   -----------------------------------------------
+   Bloque BEM: .controles-audio
+   Bloque BEM: .control-btn
+   Elementos:  .control-btn__icono
+               .control-btn__etiqueta
+   Modificador:.control-btn--mute
+   Bloque BEM: .control-volumen
+   Elementos:  .control-volumen__etiqueta
+               .control-volumen__slider
+============================================== */
+.app-cabecera {
+  padding: var(--espacio-md) var(--espacio-lg);
+}
+
+/* Contenedor de todos los controles de audio en fila */
+.controles-audio {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-md);
+  flex-wrap: wrap;
+}
+
+/* Botón de silenciar – área táctil mínima de 44px (WCAG 2.5.5) */
+.control-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-xs);
+  padding: 10px 18px;
+  border-radius: var(--radio-pastilla);
+  background-color: var(--color-trigger-fondo);
+  border: 1px solid var(--color-trigger-borde);
+  color: var(--color-texto-primario);
+  font-size: var(--fuente-pequena);
+  min-height: 44px;
+  transition: background-color var(--transicion-base);
+}
+
+.control-btn:hover {
+  background-color: var(--color-trigger-hover);
+}
+
+/* Ícono decorativo dentro del botón de control */
+.control-btn__icono {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+/* Etiqueta de texto del botón de control */
+.control-btn__etiqueta {
+  font-weight: 500;
+}
+
+/* Grupo de control de volumen (etiqueta + slider) */
+.control-volumen {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-sm);
+}
+
+/* Etiqueta accesible del slider de volumen */
+.control-volumen__etiqueta {
+  font-size: var(--fuente-pequena);
+  color: var(--color-texto-secundario);
+  white-space: nowrap;
+}
+
+/* Slider de rango para el volumen, estilizado sobre WebKit y Firefox */
+.control-volumen__slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 120px;
+  height: 4px;
+  border-radius: var(--radio-pastilla);
+  /* El relleno se actualiza dinámicamente desde app.js */
+  background: linear-gradient(
+    to right,
+    var(--color-acento) 80%,
+    rgba(255, 255, 255, 0.15) 80%
+  );
+  outline: none;
+  cursor: pointer;
+  transition: background var(--transicion-base);
+}
+
+/* Pulgar del slider – WebKit (Chrome, Safari, Edge) */
+.control-volumen__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-acento);
+  box-shadow: 0 0 6px rgba(74, 144, 164, 0.7);
+  transition: transform var(--transicion-base);
+}
+
+.control-volumen__slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* Pulgar del slider – Firefox */
+.control-volumen__slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-acento);
+}
+
+
+/* =============================================
+   ZONA CENTRAL – Avatar del sol
+   -----------------------------------------------
+   Bloque BEM: .avatar-contenedor
+   Bloque BEM: .sun
+   Elementos:  .sun__nucleo
+               .sun__rayos
+               .sun__rayo
+============================================== */
+.app-principal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Contenedor del avatar; recibe las clases de estado emocional.
+   position: relative es necesario para los pseudo-elementos de onda (ripple). */
+.avatar-contenedor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform var(--transicion-estado),
+    filter    var(--transicion-estado);
+}
+
+/* Bloque del sol: posicionamiento relativo para los rayos absolutos */
+.sun {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sol-nucleo-tamano);
+  height: var(--sol-nucleo-tamano);
+}
+
+/* Núcleo circular del sol con degradado radial */
+.sun__nucleo {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 38% 36%,
+    #fff4b0                  0%,
+    var(--sol-color-nucleo)  30%,
+    var(--sol-color-medio)   62%,
+    var(--sol-color-exterior)100%
+  );
+  box-shadow: var(--sol-brillo-neutral);
+  transition:
+    box-shadow var(--transicion-estado),
+    background var(--transicion-estado);
+  /* Animación de respiración constante */
+  animation: sol-respirar 4s ease-in-out infinite;
+}
+
+/* Contenedor giratorio de los ocho rayos */
+.sun__rayos {
+  position: absolute;
+  inset: -40px;
+  animation: sol-girar 18s linear infinite;
+}
+
+/* Cada rayo individual: línea degradada centrada y rotada */
+.sun__rayo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  border-radius: var(--radio-pastilla);
+  background: linear-gradient(
+    to bottom,
+    rgba(249, 200, 74, 0.9),
+    rgba(249, 200, 74, 0.0)
+  );
+  transform-origin: bottom center;
+  transition:
+    height  var(--transicion-estado),
+    opacity var(--transicion-estado);
+}
+
+/* Los 8 rayos distribuidos cada 45°, alternando largo y corto */
+.sun__rayo:nth-child(1) { height: 46px; transform: translate(-50%, -100%) rotate(  0deg); margin-top: -3px; }
+.sun__rayo:nth-child(2) { height: 38px; transform: translate(-50%, -100%) rotate( 45deg); margin-top: -3px; }
+.sun__rayo:nth-child(3) { height: 46px; transform: translate(-50%, -100%) rotate( 90deg); margin-top: -3px; }
+.sun__rayo:nth-child(4) { height: 38px; transform: translate(-50%, -100%) rotate(135deg); margin-top: -3px; }
+.sun__rayo:nth-child(5) { height: 46px; transform: translate(-50%, -100%) rotate(180deg); margin-top: -3px; }
+.sun__rayo:nth-child(6) { height: 38px; transform: translate(-50%, -100%) rotate(225deg); margin-top: -3px; }
+.sun__rayo:nth-child(7) { height: 46px; transform: translate(-50%, -100%) rotate(270deg); margin-top: -3px; }
+.sun__rayo:nth-child(8) { height: 38px; transform: translate(-50%, -100%) rotate(315deg); margin-top: -3px; }
+
+/* ── ANIMACIÓN BASE: el núcleo respira suavemente (escala ±4%) ── */
+@keyframes sol-respirar {
+  0%, 100% { transform: scale(1);    }
+  50%       { transform: scale(1.04); }
+}
+
+/* ── ANIMACIÓN BASE: los rayos giran (velocidad controlada por variable) ── */
+@keyframes sol-girar {
+  from { transform: rotate(  0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── ALEGRE: latido doble vibrante, lleno de energía ── */
+@keyframes sol-latir {
+  0%          { transform: scale(1);    }
+  15%         { transform: scale(1.09); }
+  30%         { transform: scale(1.04); }
+  50%         { transform: scale(1.11); }
+  65%         { transform: scale(1.06); }
+  80%         { transform: scale(1.08); }
+  100%        { transform: scale(1);    }
+}
+
+/* ── TRISTE: respiración apenas perceptible, muy lenta ── */
+@keyframes sol-respirar-lento {
+  0%, 100% { transform: scale(1);    opacity: 0.85; }
+  50%       { transform: scale(1.02); opacity: 0.75; }
+}
+
+/* ── SORPRENDIDO: pulso violeta que se expande y retorna ── */
+@keyframes sol-pulso-violeta {
+  0%   { transform: scale(1);    }
+  20%  { transform: scale(1.25); }
+  45%  { transform: scale(1.10); }
+  70%  { transform: scale(1.20); }
+  100% { transform: scale(1);    }
+}
+
+/* ── SORPRENDIDO: onda circular que se expande hacia afuera (ripple) ── */
+@keyframes sol-onda-ripple {
+  0%   { transform: scale(1);   opacity: 0.75; }
+  100% { transform: scale(3.0); opacity: 0;    }
+}
+
+
+/* =============================================
+   ESTADOS EMOCIONALES DEL AVATAR
+   -----------------------------------------------
+   Cada bloque de estado controla:
+     · Paleta de color del núcleo (background)
+     · Halo de luz (box-shadow)
+     · Velocidad de animación de respiración y giro
+     · Opacidad y tamaño de los rayos
+     · Escala global del contenedor
+   Las clases se aplican y retiran desde app.js.
+   Transición base: --transicion-estado (0.5s ease).
+============================================== */
+
+/* ────────────────────────────────────────────
+   NEUTRAL – Calma. Amarillo suave y templado.
+   Respiración pausada, giro sereno.
+──────────────────────────────────────────── */
+.avatar-contenedor.state-neutral .sun__nucleo {
+  background: radial-gradient(
+    circle at 38% 36%,
+    var(--neutral-a)  0%,
+    var(--neutral-b) 30%,
+    var(--neutral-c) 62%,
+    var(--neutral-d) 100%
+  );
+  box-shadow: var(--neutral-brillo);
+  animation-name:            sol-respirar;
+  animation-duration:        var(--neutral-vel-respirar);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.avatar-contenedor.state-neutral .sun__rayos {
+  animation-duration: var(--neutral-vel-girar);
+}
+
+.avatar-contenedor.state-neutral .sun__rayo {
+  opacity: 0.85;
+  filter: none;
+}
+
+.avatar-contenedor.state-neutral {
+  transform: scale(1);
+}
+
+/* ────────────────────────────────────────────
+   ALEGRE – Energía. Dorado intenso y vibrante.
+   Latido doble, giro rápido, rayos a máxima
+   intensidad y brillo.
+──────────────────────────────────────────── */
+.avatar-contenedor.state-happy .sun__nucleo {
+  background: radial-gradient(
+    circle at 38% 36%,
+    var(--alegre-a)  0%,
+    var(--alegre-b) 28%,
+    var(--alegre-c) 60%,
+    var(--alegre-d) 100%
+  );
+  box-shadow: var(--alegre-brillo);
+  animation-name:            sol-latir;
+  animation-duration:        var(--alegre-vel-respirar);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.avatar-contenedor.state-happy .sun__rayos {
+  animation-duration: var(--alegre-vel-girar);
+}
+
+.avatar-contenedor.state-happy .sun__rayo {
+  opacity: 1;
+  /* Rayos más largos: sobreescribe el alto base de nth-child */
+  height: 60px !important;
+  filter: brightness(1.5);
+}
+
+.avatar-contenedor.state-happy {
+  transform: scale(1.1);
+}
+
+/* ────────────────────────────────────────────
+   TRISTE – Recogimiento. Azul desaturado frío.
+   Respiración apenas perceptible, giro casi
+   detenido, rayos cortos y tenues.
+──────────────────────────────────────────── */
+.avatar-contenedor.state-sad .sun__nucleo {
+  background: radial-gradient(
+    circle at 38% 36%,
+    var(--triste-a)  0%,
+    var(--triste-b) 32%,
+    var(--triste-c) 65%,
+    var(--triste-d) 100%
+  );
+  box-shadow: var(--triste-brillo);
+  animation-name:            sol-respirar-lento;
+  animation-duration:        var(--triste-vel-respirar);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.avatar-contenedor.state-sad .sun__rayos {
+  /* Rotación casi imperceptible: una vuelta cada 120 segundos */
+  animation-duration: var(--triste-vel-girar);
+}
+
+.avatar-contenedor.state-sad .sun__rayo {
+  opacity: 0.12;
+  /* Rayos muy cortos: símbolo de repliegue */
+  height: 18px !important;
+  filter: brightness(0.5) saturate(0.3);
+}
+
+.avatar-contenedor.state-sad {
+  transform: scale(0.82);
+}
+
+/* ────────────────────────────────────────────
+   SORPRENDIDO – Ruptura. Violeta con ondas
+   que se expanden hacia el exterior (ripple).
+   Auto-retorna a neutral tras 1.8 s (en app.js).
+──────────────────────────────────────────── */
+.avatar-contenedor.state-surprised .sun__nucleo {
+  background: radial-gradient(
+    circle at 38% 36%,
+    var(--sorprendido-a)  0%,
+    var(--sorprendido-b) 30%,
+    var(--sorprendido-c) 62%,
+    var(--sorprendido-d) 100%
+  );
+  box-shadow: var(--sorprendido-brillo);
+  /* Respirar continuo + pulso violeta único al entrar */
+  animation-name:
+    sol-respirar,
+    sol-pulso-violeta;
+  animation-duration:
+    var(--sorprendido-vel-respirar),
+    0.9s;
+  animation-timing-function:
+    ease-in-out,
+    ease-out;
+  animation-iteration-count:
+    infinite,
+    1;
+}
+
+.avatar-contenedor.state-surprised .sun__rayos {
+  animation-duration: var(--sorprendido-vel-girar);
+}
+
+.avatar-contenedor.state-surprised .sun__rayo {
+  opacity: 1;
+  /* hue-rotate desplaza el amarillo hacia el violeta */
+  filter: brightness(1.4) hue-rotate(200deg);
+}
+
+.avatar-contenedor.state-surprised {
+  transform: scale(1.15);
+}
+
+/* Ondas de expansión concéntricas: pseudo-elementos circulares */
+.avatar-contenedor.state-surprised::before,
+.avatar-contenedor.state-surprised::after {
+  content: '';
+  position: absolute;
+  width: var(--sol-nucleo-tamano);
+  height: var(--sol-nucleo-tamano);
+  border-radius: 50%;
+  border: 2.5px solid rgba(155, 89, 182, 0.70);
+  /* pointer-events: none para no interferir con el botón PTT */
+  pointer-events: none;
+  animation: sol-onda-ripple 1.5s ease-out forwards;
+}
+
+/* Segunda onda con ligero desfase y tono más claro */
+.avatar-contenedor.state-surprised::after {
+  border-color: rgba(200, 150, 240, 0.50);
+  animation-delay: 0.4s;
+}
+
+
+/* =============================================
+   ZONA INFERIOR – Respuestas rápidas y PTT
+   -----------------------------------------------
+   Bloque BEM: .respuestas-rapidas
+   Elemento:   .respuestas-rapidas__btn
+   Modificador:.respuestas-rapidas__btn--activo
+   Bloque BEM: .ptt-contenedor
+   Bloque BEM: .ptt-btn
+   Elementos:  .ptt-btn__icono
+               .ptt-btn__etiqueta
+   Modificador:.ptt-btn--grabando
+============================================== */
+.app-pie {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacio-md);
+  padding: var(--espacio-md) var(--espacio-lg) var(--espacio-lg);
+}
+
+/* Chips de respuesta rápida: compactos dentro del dispositivo */
+.respuestas-rapidas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+/*
+  Chip de respuesta rápida integrado en el dispositivo físico.
+  Versión compacta que cabe dentro del colgante (240px ancho).
+  El área táctil mínima se logra con padding vertical generoso.
+*/
+.respuestas-rapidas__btn {
+  padding: 6px 10px;
+  min-height: 30px;
+  border-radius: var(--radio-pastilla);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  color: var(--color-texto-secundario);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  transition:
+    background-color var(--transicion-base),
+    border-color     var(--transicion-base),
+    color            var(--transicion-base),
+    transform        var(--transicion-base);
+}
+
+.respuestas-rapidas__btn:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--color-texto-primario);
+  transform: translateY(-1px);
+}
+
+.respuestas-rapidas__btn:active {
+  transform: translateY(0);
+}
+
+/* Modificador: chip activo tras ser pulsado (feedback visual temporal) */
+.respuestas-rapidas__btn--activo {
+  background-color: rgba(74, 144, 164, 0.20);
+  border-color: var(--color-acento);
+  color: #8dd4e8;
+}
+
+/*
+  ─── BOTÓN PTT – COMPONENTE FÍSICO TÁCTIL ──────────────
+  Bloque BEM: .ptt-contenedor / .ptt-btn
+  El botón push-to-talk se integra en la parte inferior
+  del colgante como un pulsador mecánico real:
+
+  · Forma circular con degradado 3D radial
+  · Sombra de elevación (como botón sobre superficie)
+  · Efecto de hundimiento al presionar (:active)
+  · Anillo LED de acento cuando graba (.ptt-btn--grabando)
+  ─────────────────────────────────────────────────────────
+*/
+
+/* Centra el botón físico dentro del pie del dispositivo */
+.ptt-contenedor {
+  width: auto;
+  max-width: none;
+  display: flex;
+  justify-content: center;
+}
+
+/* Botón físico circular integrado en el hardware */
+.ptt-btn {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  padding: 0;
+  min-height: unset;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+
+  /* Material: plástico táctil premium con relieve esférico */
+  background: radial-gradient(
+    circle at 36% 30%,
+    #3c4368 0%,
+    #242c52 46%,
+    #16193c 100%
+  );
+  border: 2px solid #3e4674;
+  color: var(--color-texto-primario);
+
+  /* Profundidad 3D: botón elevado sobre la superficie del colgante */
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.72),
+    0 2px  5px rgba(0, 0, 0, 0.52),
+    inset 0  2px 3px rgba(255, 255, 255, 0.11),
+    inset 0 -2px 6px rgba(0,   0,   0, 0.58);
+
+  /* Evita selección de texto al mantener presionado */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+
+  transition:
+    background       var(--transicion-base),
+    box-shadow       var(--transicion-base),
+    border-color     var(--transicion-base),
+    transform        var(--transicion-base);
+}
+
+/* Hover: el botón se ilumina levemente */
+.ptt-btn:hover {
+  background: radial-gradient(
+    circle at 36% 30%,
+    #454d7a 0%,
+    #2d3562 46%,
+    #1c2248 100%
+  );
+  border-color: #525a94;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.72),
+    0 2px  5px rgba(0, 0, 0, 0.52),
+    inset 0  2px 3px rgba(255, 255, 255, 0.14),
+    inset 0 -2px 6px rgba(0,   0,   0, 0.58);
+}
+
+/* Active: el botón se hunde mecánicamente (efecto físico) */
+.ptt-btn:active {
+  transform: translateY(2px) scale(0.97);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.72),
+    0 1px 2px rgba(0, 0, 0, 0.52),
+    inset 0 3px 8px rgba(0, 0, 0, 0.68);
+}
+
+/* Modificador: grabando – anillo LED de acento azul-verde */
+.ptt-btn--grabando {
+  background: radial-gradient(
+    circle at 36% 30%,
+    #1e3e5e 0%,
+    #142e4c 46%,
+    #0c1c2e 100%
+  );
+  border-color: var(--color-acento);
+  box-shadow:
+    0 0  0  4px rgba(74, 144, 164, 0.30),
+    0 0 20px 6px rgba(74, 144, 164, 0.22),
+    0 4px 10px rgba(0,  0,  0,   0.60),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.60);
+  transform: translateY(1px);
+  animation: ptt-pulso 1.2s ease-in-out infinite;
+}
+
+/* Pulso de grabación: el anillo LED late rítmicamente */
+@keyframes ptt-pulso {
+  0%, 100% {
+    box-shadow:
+      0 0  0  4px rgba(74, 144, 164, 0.30),
+      0 0 20px 6px rgba(74, 144, 164, 0.22),
+      0 4px 10px rgba(0, 0, 0, 0.60),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.60);
+  }
+  50% {
+    box-shadow:
+      0 0  0  7px rgba(74, 144, 164, 0.15),
+      0 0 30px 10px rgba(74, 144, 164, 0.30),
+      0 4px 10px rgba(0, 0, 0, 0.60),
+      inset 0 -2px 6px rgba(0, 0, 0, 0.60);
+  }
+}
+
+/* Ícono del micrófono dentro del botón circular */
+.ptt-btn__icono {
+  font-size: 1.25em;
+  line-height: 1;
+}
+
+/* Micro-etiqueta bajo el ícono: mínima e informativa */
+.ptt-btn__etiqueta {
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.65;
+  line-height: 1.1;
+  text-align: center;
+  /* Evita que el texto consuma eventos táctiles */
+  pointer-events: none;
+}
+
+
+/* =============================================
+   DISEÑO ADAPTABLE (responsive)
+============================================== */
+
+/* ─── Ajustes para pantallas pequeñas (≤ 480px, móviles) ─── */
+@media (max-width: 480px) {
+  :root {
+    --fuente-base:    16px;
+    --fuente-grande:  18px;
+    --fuente-titular: 22px;
+    --espacio-lg:     24px;
+    --espacio-xl:     36px;
+  }
+
+  /* El dispositivo físico se escala ligeramente en pantallas muy pequeñas */
+  .wearable__dispositivo {
+    width: 210px;
+    height: 340px;
+    padding: var(--espacio-md) var(--espacio-sm) var(--espacio-sm);
+  }
+
+  .wearable__colgante {
+    width: 130px;
+    height: 130px;
+    --sol-nucleo-tamano: 84px;
+  }
+
+  .modal-card {
+    padding: var(--espacio-lg) var(--espacio-md);
+  }
+}
+
+/* Respeta la preferencia del sistema operativo de reducir movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:       0.01ms !important;
+    animation-iteration-count: 1     !important;
+    transition-duration:       0.01ms !important;
+  }
+}

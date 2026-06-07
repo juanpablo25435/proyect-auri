@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AURI – Agente interactivo de acompañamiento emocional en proceso de duelo" />
+    <title>AURI</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+
+    <!--
+      ════════════════════════════════════════════
+      MODAL DE BIENVENIDA Y CONSENTIMIENTO
+      ────────────────────────────────────────────
+      Bloquea toda interacción hasta que el usuario
+      acepte el aviso de no-sustitución clínica.
+      Patrón ARIA: role="dialog" + aria-modal="true"
+      + aria-labelledby + aria-describedby.
+      ════════════════════════════════════════════
+    -->
+    <div
+      id="welcome-modal"
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-titulo"
+      aria-describedby="modal-descripcion"
+    >
+      <div class="modal-card" tabindex="-1">
+        <h1 id="modal-titulo" class="modal-card__titulo">
+          Bienvenido/a a AURI
+        </h1>
+        <p id="modal-descripcion" class="modal-card__descripcion">
+          Hola, soy AURI. Soy un agente interactivo diseñado para escucharte y
+          acompañarte emocionalmente en tu proceso de pérdida. No soy un humano,
+          no soy un psicólogo clínico y no reemplazo la terapia médica. Este es
+          un espacio seguro no clínico. Si te encuentras en una situación de
+          emergencia, por favor comunícate a la línea
+          <strong class="modal-card__emergencia">123</strong>.
+        </p>
+        <button id="accept-btn" class="modal-card__btn" type="button">
+          Entiendo y acepto
+        </button>
+      </div>
+    </div><!-- /modal -->
+
+
+    <!--
+      ════════════════════════════════════════════
+      CONTENEDOR PRINCIPAL – SPA DE DOS VISTAS
+      ────────────────────────────────────────────
+      Permanece oculto (aria-hidden="true") hasta
+      que el usuario acepte el modal.
+      Contiene dos secciones que se alternan:
+        · #vista-wearable → colgante físico
+        · #vista-app      → app compañera
+      Un botón flotante (#btn-abrir-app) permite
+      navegar entre ambas vistas sin recargar.
+      ════════════════════════════════════════════
+    -->
+    <div id="app-container" class="app-container" aria-hidden="true">
+
+
+      <!--
+        ════════════════════════════════════════════
+        VISTA 1 – COLGANTE / WEARABLE
+        ────────────────────────────────────────────
+        Simula el dispositivo físico en forma de
+        colgante. Muestra el avatar del sol animado
+        y el botón PTT como único control de voz.
+        Los controles de audio están en la cabecera
+        para no saturar la interfaz del wearable.
+        ════════════════════════════════════════════
+      -->
+      <section
+        id="vista-wearable"
+        class="wearable"
+        aria-label="Colgante AURI"
+      >
+
+        <!--
+          Cabecera del wearable – controles de audio.
+          role="banner" explícito porque <header> está
+          anidado en <section>, no directamente en <body>.
+        -->
+        <header class="wearable__cabecera" role="banner">
+          <div class="controles-audio">
+
+            <!-- Botón mute / unmute -->
+            <button
+              id="mute-btn"
+              class="control-btn control-btn--mute"
+              type="button"
+              aria-label="Silenciar sonido"
+              aria-pressed="false"
+            >
+              <span class="control-btn__icono" aria-hidden="true">🔊</span>
+              <span class="control-btn__etiqueta">Silenciar</span>
+            </button>
+
+            <!-- Slider de volumen -->
+            <div class="control-volumen">
+              <label for="volume-slider" class="control-volumen__etiqueta">
+                Volumen
+              </label>
+              <input
+                id="volume-slider"
+                class="control-volumen__slider"
+                type="range"
+                min="0"
+                max="100"
+                value="80"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="80"
+              />
+            </div>
+
+          </div>
+        </header><!-- /wearable__cabecera -->
+
+
+        <!--
+          Dispositivo físico del colgante: envuelve la pantalla
+          circular y los controles integrados en el hardware.
+          El shape oval/gota y las sombras se aplican con CSS.
+        -->
+        <div class="wearable__dispositivo" role="group" aria-label="Colgante AURI">
+
+          <!--
+            Cuerpo del colgante – avatar del sol.
+            El contenedor circular .wearable__colgante
+            simula la pantalla interna del dispositivo.
+          -->
+          <main class="wearable__cuerpo">
+            <div class="wearable__colgante" aria-hidden="true">
+
+              <!-- El sol animado vive aquí -->
+              <div
+                id="avatar-container"
+                class="avatar-contenedor state-neutral"
+                aria-label="Avatar de AURI, el sol"
+              >
+                <div class="sun" aria-hidden="true">
+                  <div class="sun__nucleo"></div>
+                  <div class="sun__rayos">
+                    <span class="sun__rayo"></span>
+                    <span class="sun__rayo"></span>
+                    <span class="sun__rayo"></span>
+                    <span class="sun__rayo"></span>
+                    <span class="sun__rayo"></span>
+                    <span class="sun__rayo"></span>
+                    <span class="sun__rayo"></span>
+                    <span class="sun__rayo"></span>
+                  </div>
+                </div>
+              </div><!-- /avatar-contenedor -->
+
+            </div><!-- /wearable__colgante -->
+
+            <!-- Indicador de estado textual para lectores de pantalla -->
+            <p
+              id="estado-auri"
+              class="wearable__estado-texto"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              AURI te escucha
+            </p>
+          </main><!-- /wearable__cuerpo -->
+
+
+          <!--
+            Pie del wearable – zona de interacción integrada al hardware.
+            Las respuestas rápidas son chips táctiles compactos;
+            el PTT es un botón físico circular embebido en el colgante.
+          -->
+          <footer class="wearable__pie">
+
+            <!-- Respuestas rápidas predefinidas: chips táctiles compactos -->
+            <nav class="respuestas-rapidas" aria-label="Respuestas rápidas">
+              <button
+                class="respuestas-rapidas__btn"
+                type="button"
+                data-trigger="necesito-hablar"
+              >
+                Necesito hablar
+              </button>
+              <button
+                class="respuestas-rapidas__btn"
+                type="button"
+                data-trigger="extrano-a-alguien"
+              >
+                Extraño a alguien
+              </button>
+              <button
+                class="respuestas-rapidas__btn"
+                type="button"
+                data-trigger="me-siento-solo"
+              >
+                Me siento solo/a
+              </button>
+            </nav>
+
+            <!-- Botón PTT físico integrado en la parte inferior del colgante -->
+            <div class="ptt-contenedor">
+              <button
+                id="ptt-btn"
+                class="ptt-btn"
+                type="button"
+                aria-label="Mantener presionado para hablar"
+              >
+                <span class="ptt-btn__icono" aria-hidden="true">🎙️</span>
+                <span class="ptt-btn__etiqueta">Hablar</span>
+              </button>
+            </div>
+
+          </footer><!-- /wearable__pie -->
+
+        </div><!-- /wearable__dispositivo -->
+
+      </section><!-- /vista-wearable -->
+
+
+      <!--
+        ════════════════════════════════════════════
+        VISTA 2 – APP COMPAÑERA (oculta por defecto)
+        ────────────────────────────────────────────
+        Simula la aplicación del celular que acompaña
+        al colgante. Permite ver el historial del chat,
+        gestionar recuerdos y borrar datos (privacidad).
+        Se activa con el botón flotante #btn-abrir-app.
+        ════════════════════════════════════════════
+      -->
+      <section
+        id="vista-app"
+        class="companion-app"
+        aria-label="App Compañera de AURI"
+        hidden
+      >
+
+        <!--
+          Cabecera de la app compañera.
+          Contiene el botón de regreso al colgante
+          y el título identificador de la vista.
+        -->
+        <header class="companion-app__cabecera" role="banner">
+          <button
+            id="btn-volver-wearable"
+            class="companion-app__btn-volver"
+            type="button"
+            aria-label="Volver a la vista del colgante"
+          >
+            <span aria-hidden="true">←</span>
+            Volver al Colgante
+          </button>
+
+          <h2 class="companion-app__titulo">
+            <span aria-hidden="true">☀️</span> AURI
+          </h2>
+
+          <!-- Indicador de perfil de usuario (nombre, si fue guardado) -->
+          <p id="companion-nombre-usuario" class="companion-app__nombre-usuario" aria-live="polite">
+            <!-- app.js lo rellena con el nombre guardado en memoria -->
+          </p>
+        </header><!-- /companion-app__cabecera -->
+
+
+        <!--
+          Cuerpo de la app: historial de chat + panel de recuerdos.
+          Usa CSS Grid para mostrar ambas columnas en pantallas anchas
+          y apilarlas en pantallas estrechas (móvil).
+        -->
+        <div class="companion-app__cuerpo">
+
+          <!--
+            Historial de chat
+            ─────────────────
+            Zona de scroll donde app.js inyecta los turnos
+            de la conversación (.chat-burbuja--auri / --usuario).
+            aria-live="polite" anuncia nuevos mensajes en lectores de pantalla.
+          -->
+          <main
+            id="chat-historial"
+            class="chat-historial"
+            aria-label="Historial de conversación con AURI"
+            aria-live="polite"
+            aria-relevant="additions"
+          >
+            <!-- Mensaje de estado inicial -->
+            <p class="chat-historial__vacio" id="chat-vacio">
+              Tu conversación con AURI aparecerá aquí cuando empieces a hablar.
+            </p>
+            <!-- app.js añade burbujas: .chat-burbuja--auri / .chat-burbuja--usuario -->
+          </main><!-- /chat-historial -->
+
+
+          <!--
+            Panel de recuerdos y configuración
+            ────────────────────────────────────
+            Permite al usuario ver los recuerdos guardados,
+            añadir nuevos y gestionar su privacidad.
+          -->
+          <aside
+            class="panel-recuerdos"
+            aria-label="Panel de recuerdos y configuración"
+          >
+            <h3 class="panel-recuerdos__titulo">Mis recuerdos</h3>
+
+            <!--
+              Lista de recuerdos guardados.
+              app.js la rellena dinámicamente al cargar la vista app.
+            -->
+            <ul
+              id="lista-recuerdos"
+              class="panel-recuerdos__lista"
+              aria-label="Recuerdos guardados"
+              aria-live="polite"
+            >
+              <!-- Si no hay recuerdos, app.js muestra el mensaje vacío -->
+              <li class="panel-recuerdos__vacio" id="recuerdos-vacio">
+                Aún no has compartido ningún recuerdo.
+              </li>
+            </ul>
+
+            <!--
+              Formulario para añadir un nuevo recuerdo.
+              El id del form es usado por app.js para el submit.
+            -->
+            <form
+              id="form-recuerdo"
+              class="panel-recuerdos__form"
+              aria-label="Añadir nuevo recuerdo"
+              novalidate
+            >
+              <label for="recuerdo-clave" class="panel-recuerdos__label">
+                Etiqueta del recuerdo
+              </label>
+              <input
+                id="recuerdo-clave"
+                class="panel-recuerdos__input"
+                type="text"
+                placeholder="Ej: Su risa, Sus manos…"
+                maxlength="60"
+                required
+                aria-required="true"
+              />
+
+              <label for="recuerdo-texto" class="panel-recuerdos__label">
+                Descripción
+              </label>
+              <textarea
+                id="recuerdo-texto"
+                class="panel-recuerdos__textarea"
+                placeholder="Escribe aquí lo que quieras recordar con AURI…"
+                rows="3"
+                maxlength="500"
+                required
+                aria-required="true"
+              ></textarea>
+
+              <button type="submit" class="panel-recuerdos__btn-guardar">
+                <span aria-hidden="true">💾</span> Guardar recuerdo
+              </button>
+            </form><!-- /form-recuerdo -->
+
+            <!-- Separador visual -->
+            <hr class="panel-recuerdos__separador" />
+
+            <!-- Sección de privacidad -->
+            <div class="panel-recuerdos__privacidad">
+              <h4 class="panel-recuerdos__subtitulo">Privacidad</h4>
+              <p class="panel-recuerdos__aviso">
+                Todos tus datos se guardan solo en este dispositivo.
+                Puedes eliminarlos en cualquier momento.
+              </p>
+              <button
+                id="btn-borrar-memoria"
+                class="panel-recuerdos__btn-borrar"
+                type="button"
+                aria-label="Eliminar toda la memoria guardada de AURI"
+              >
+                <span aria-hidden="true">🗑</span> Borrar toda mi memoria
+              </button>
+            </div>
+
+          </aside><!-- /panel-recuerdos -->
+
+        </div><!-- /companion-app__cuerpo -->
+
+
+        <!--
+          Pie de la app compañera – entrada de texto.
+          Alternativa a la voz: el usuario puede escribir
+          directamente a AURI desde la app del celular.
+        -->
+        <footer class="companion-app__pie" role="contentinfo">
+          <form
+            id="form-chat"
+            class="chat-entrada"
+            aria-label="Escribe un mensaje a AURI"
+            novalidate
+          >
+            <input
+              id="chat-input"
+              class="chat-entrada__input"
+              type="text"
+              placeholder="Escríbele a AURI…"
+              aria-label="Escribe tu mensaje"
+              maxlength="1000"
+              autocomplete="off"
+            />
+            <button
+              id="btn-enviar-chat"
+              class="chat-entrada__btn-enviar"
+              type="submit"
+              aria-label="Enviar mensaje"
+            >
+              <span aria-hidden="true">➤</span>
+            </button>
+          </form>
+        </footer><!-- /companion-app__pie -->
+
+      </section><!-- /vista-app -->
+
+
+      <!--
+        ════════════════════════════════════════════
+        BOTÓN FLOTANTE – ABRIR APP EN EL CELULAR
+        ────────────────────────────────────────────
+        Siempre visible sobre ambas vistas.
+        Alterna entre #vista-wearable y #vista-app.
+        Posicionado en la esquina inferior derecha.
+        Su aria-label y texto cambian según la vista
+        activa (actualizado por app.js).
+        ════════════════════════════════════════════
+      -->
+      <button
+        id="btn-abrir-app"
+        class="btn-abrir-app"
+        type="button"
+        aria-label="Abrir App Compañera de AURI en el celular"
+        data-vista="wearable"
+      >
+        <span class="btn-abrir-app__icono" aria-hidden="true">📱</span>
+        <span class="btn-abrir-app__etiqueta">App</span>
+      </button>
+
+    </div><!-- /app-container -->
+
+
+    <!-- env.js: API Key local (en .gitignore, nunca al repo) -->
+    <script src="env.js"></script>
+
+    <!-- Script principal -->
+    <script src="app.js"></script>
+
+  </body>
+</html>
