@@ -669,7 +669,7 @@ async function procesarEntradaUsuario(texto) {
     // Parsea y valida el JSON estructurado { respuesta, emocion_avatar }
     let data;
     try {
-      data = JSON.parse(textoRespuesta);
+      data = _parsearJsonGemini(textoRespuesta);
     } catch {
       throw Object.assign(
         new Error(`JSON inválido en respuesta de Gemini: ${textoRespuesta.slice(0, 120)}`),
@@ -689,7 +689,7 @@ async function procesarEntradaUsuario(texto) {
     // Añade la respuesta del modelo al historial para el siguiente turno
     historialConversacion.push({
       role:  'model',
-      parts: [{ text: textoRespuesta }],
+      parts: [{ text: JSON.stringify(data) }],
     });
 
     // Extracción de datos de memoria: ligero, síncrono, no bloqueante.
@@ -723,6 +723,39 @@ async function procesarEntradaUsuario(texto) {
 // ─────────────────────────────────────────────
 // 4.4 UTILIDADES INTERNAS DE LA INTEGRACIÓN
 // ─────────────────────────────────────────────
+
+/**
+ * Intenta parsear JSON incluso cuando Gemini agrega texto extra
+ * antes o después del objeto (ej: "Here is the JSON requested:").
+ *
+ * @param {string} texto
+ * @returns {Object}
+ */
+function _parsearJsonGemini(texto) {
+  // Caso ideal: ya viene JSON puro
+  try {
+    return JSON.parse(texto);
+  } catch {
+    // Continúa con extracción tolerante
+  }
+
+  // Limpia posibles fences markdown
+  const sinFences = String(texto)
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+
+  // Extrae desde la primera llave hasta la última
+  const inicio = sinFences.indexOf('{');
+  const fin = sinFences.lastIndexOf('}');
+  if (inicio === -1 || fin === -1 || fin <= inicio) {
+    throw new Error('No se encontró un objeto JSON válido en la respuesta.');
+  }
+
+  const bloqueJson = sinFences.slice(inicio, fin + 1);
+  return JSON.parse(bloqueJson);
+}
 
 /**
  * Valida que el JSON recibido de Gemini cumpla el contrato del prompt.
