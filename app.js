@@ -344,35 +344,33 @@ function _inicializarReconocimiento() {
 }
 
 /**
- * PLACEHOLDER – Fase 2.
- * Iniciará el reconocimiento de voz con la Web Speech API.
- * El equipo de Fase 2 debe reemplazar el cuerpo de esta función.
+ * Inicia el reconocimiento de voz vinculado al PTT.
+ * Usa el singleton `recognition` inicializado por _inicializarReconocimiento().
+ * Interrumpe cualquier síntesis activa antes de abrir el micrófono.
  */
 function iniciarReconocimientoVoz() {
-  // Interrumpe la síntesis activa: el usuario quiere hablar ahora
+  // Interrumpe síntesis activa: el usuario quiere hablar ahora
   if (window.speechSynthesis?.speaking) {
     window.speechSynthesis.cancel();
   }
 
-  // Crea el reconocedor la primera vez que se necesita
-  if (!_reconocedor) {
-    _reconocedor = _crearReconocedor();
-  }
-
-  if (!_reconocedor) {
-    // Sin soporte en el navegador: resetea la UI de inmediato
-    _resetearEstadoPTT();
-    _manejarErrorVoz('service-not-allowed');
+  if (!_speechRecognitionSoportado) {
+    reproducirAudioAgente(
+      'El reconocimiento de voz no está disponible en este navegador. Puedes usar el chat de texto.'
+    );
     return;
   }
 
-  _transcripcionFinal = '';
+  // Inicializa el singleton la primera vez (idempotente)
+  _inicializarReconocimiento();
+
+  if (appState.isRecording) return; // guard: no llamar start() si ya está activo
 
   try {
-    _reconocedor.start();
+    recognition.start();
     console.log('[Voz] Reconocimiento iniciado.');
   } catch (err) {
-    // InvalidStateError: pointerdown doble muy rápido mientras ya está activo
+    // InvalidStateError: press doble muy rápido mientras el motor ya arranca
     console.warn('[Voz] start() ignorado – reconocedor ya activo:', err.message);
   }
 }
@@ -384,14 +382,13 @@ function iniciarReconocimientoVoz() {
  * abort() descartaría el audio sin transcribirlo.
  */
 function detenerReconocimientoVoz() {
-  if (!_reconocedor) return;
+  if (!recognition || !appState.isRecording) return;
   try {
-    _reconocedor.stop();
+    recognition.stop();
     console.log('[Voz] Escucha detenida – procesando transcripción…');
   } catch (err) {
     // InvalidStateError: stop() antes de que start() completara (press muy breve)
     console.warn('[Voz] stop() en reconocedor ya detenido:', err.message);
-    _resetearEstadoPTT();
   }
 }
 
@@ -505,7 +502,8 @@ function _sintetizarVoz(texto) {
  *  1. Registra la respuesta en consola (depuración)
  *  2. Añade la burbuja de chat en #chat-historial (siempre, incluso con mute)
  *  3. Actualiza el texto de estado del wearable
- *  4. Vocaliza el texto respetando mute y volumen del hardware
+ *  4. Delega la síntesis en _sintetizarVoz() que aplica selección de voz
+ *     con prioridad es-CO, respeta mute y mapea el slider 0-100 → 0.0-1.0
  *
  * @param {string} texto – Respuesta del agente a mostrar y vocalizar
  */
@@ -520,25 +518,8 @@ function reproducirAudioAgente(texto) {
     estadoAuri.textContent = texto.length > 60 ? texto.slice(0, 57) + '…' : texto;
   }
 
-  // Si está en mute, se mantiene solo salida visual y chat.
-  if (appState.isMuted || !('speechSynthesis' in window)) return;
-
-  try {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(texto);
-    const idioma = _idiomaVozActual();
-    utterance.lang = idioma;
-    utterance.volume = Math.max(0, Math.min(1, appState.volume / 100));
-
-    const voces = window.speechSynthesis.getVoices() || [];
-    const idiomaBase = idioma.split('-')[0];
-    const voz = voces.find(v => v.lang === idioma) || voces.find(v => v.lang?.startsWith(idiomaBase));
-    if (voz) utterance.voice = voz;
-
-    window.speechSynthesis.speak(utterance);
-  } catch (err) {
-    console.warn('[AURI] No se pudo reproducir voz:', err.message);
-  }
+  // Síntesis de voz: respeta mute y volumen del hardware
+  _sintetizarVoz(texto);
 }
 
 
@@ -834,7 +815,7 @@ async function procesarEntradaUsuario(texto) {
 
     _validarRespuestaGemini(data);
 
-    // Traduce la emoción en español de la API → clase CSS interna
+    // Valida emocion_avatar (valores en inglés) y obtiene la clase CSS del avatar
     const claseEstado = _traducirEmocion(data.emocion_avatar);
 
     // Ejecuta ambas acciones de respuesta (visual + audio) en paralelo
@@ -1053,29 +1034,40 @@ function activarGrabacion() {
  * Desactiva el modo de grabación PTT (pointerup / pointerleave).
  *
  * Flujo con SpeechRecognition:
- *   1. Llama a detenerReconocimientoVoz() → recognition.stop()
- *   2. La API procesa el audio acumulado y dispara 'result' + 'end'
- *   3. El handler de 'end' llama a _resetearEstadoPTT() y envía el texto
+ *   1. Establece _enviarAlDetener = true para que el handler 'end' envíe
+ *      la transcripción acumulada a procesarEntradaUsuario().
+ *   2. Llama a detenerReconocimientoVoz() → recognition.stop()
+ *   3. La API procesa el audio y dispara 'result' + 'end'
  *   ⟹ La UI se resetea en 'end', NO aquí, para evitar parpadeos.
  *
- * Flujo sin soporte de SpeechRecognition:
- *   El reconocedor es null → resetea la UI directamente.
+ * Nota crítica: _enviarAlDetener DEBE ser true antes de stop().
+ * Si fuera false, el handler 'end' descartaría la transcripción.
  */
 function desactivarGrabacion() {
   if (!appState.isRecording) return;
   _limpiarTimerSilencio();
-  _enviarAlDetener = false;
-  try { recognition?.stop(); } catch (e) { }
-  console.log('Captura de voz detenida manualmente.');
+  _enviarAlDetener = true;   // garantiza que 'end' envíe el texto acumulado
+  detenerReconocimientoVoz();
+  console.log('[Voz] Captura de voz detenida manualmente.');
 }
 
-// Botón Hablar: click para iniciar y click para detener.
-pttBtn.addEventListener('click', () => {
-  if (appState.isRecording) {
-    desactivarGrabacion();
-  } else {
-    activarGrabacion();
-  }
+// PTT: presionar activa el micrófono, soltar (o salir) lo detiene.
+// setPointerCapture redirige todos los eventos del puntero al botón aunque
+// el dedo o cursor se desplace fuera de él durante la pulsación.
+pttBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); // evita el click sintético en dispositivos táctiles
+  pttBtn.setPointerCapture(e.pointerId);
+  activarGrabacion();
+});
+
+pttBtn.addEventListener('pointerup', () => {
+  desactivarGrabacion();
+});
+
+// pointerleave se dispara si el puntero sale del botón mientras está capturado.
+// Solo detiene si el botón seguía físicamente presionado (e.buttons > 0).
+pttBtn.addEventListener('pointerleave', (e) => {
+  if (e.buttons > 0) desactivarGrabacion();
 });
 
 
@@ -1097,8 +1089,11 @@ function actualizarIconoMute() {
 muteBtn.addEventListener('click', () => {
   appState.isMuted = !appState.isMuted;
   actualizarIconoMute();
+  // Si AURI estaba hablando y se activa el mute, cancela el audio de inmediato
+  if (appState.isMuted && window.speechSynthesis?.speaking) {
+    window.speechSynthesis.cancel();
+  }
   console.log(`Audio ${appState.isMuted ? 'silenciado' : 'activado'}`);
-  // TODO (Fase 2): propagar el estado de mute al AudioContext / SpeechSynthesis
 });
 
 volumeSlider.addEventListener('input', () => {
@@ -1119,8 +1114,9 @@ volumeSlider.addEventListener('input', () => {
     actualizarIconoMute();
   }
 
+  // appState.volume se lee en tiempo de ejecución por _sintetizarVoz()
+  // en cada nueva utterance: no se requiere propagación adicional.
   console.log(`Volumen: ${value}%`);
-  // TODO (Fase 2): aplicar el volumen al AudioContext o SpeechSynthesis
 });
 
 
