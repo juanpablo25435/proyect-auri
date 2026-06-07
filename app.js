@@ -23,7 +23,7 @@
 // registra el error y retorna null sin romper la interfaz.
 
 const GEMINI_API_KEY = window.AURI_CONFIG?.apiKey ?? '';
-const GEMINI_MODEL   = 'gemini-1.5-flash';
+const GEMINI_MODEL   = 'gemini-2.5-flash';
 const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /**
@@ -53,6 +53,7 @@ const appContainer   = document.getElementById('app-container');
 const avatarContainer = document.getElementById('avatar-container');
 const muteBtn        = document.getElementById('mute-btn');
 const volumeSlider   = document.getElementById('volume-slider');
+const speechLangSelect = document.getElementById('speech-lang');
 const pttBtn         = document.getElementById('ptt-btn');
 const triggerBtns    = document.querySelectorAll('.respuestas-rapidas__btn');
 
@@ -229,14 +230,144 @@ function cambiarEstadoEmocional(estado) {
 // 3. MOCKS DE INTERFAZ DE VOZ (Fase 2)
 // ─────────────────────────────────────────────
 
+const _SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const _speechRecognitionSoportado = !!_SpeechRecognition;
+const SILENCE_DELAY_MS = 1800;
+
+let recognition = null;
+let _silenceTimer = null;
+let _acumuladoTranscripcion = '';
+let _enviarAlDetener = false;
+
+function _limpiarTimerSilencio() {
+  if (_silenceTimer) {
+    clearTimeout(_silenceTimer);
+    _silenceTimer = null;
+  }
+}
+
+function _idiomaVozActual() {
+  return speechLangSelect?.value || 'es-CO';
+}
+
+function _programarCortePorSilencio() {
+  _limpiarTimerSilencio();
+  _silenceTimer = setTimeout(() => {
+    _enviarAlDetener = true;
+    try { recognition?.stop(); } catch (e) { }
+  }, SILENCE_DELAY_MS);
+}
+
+function _inicializarReconocimiento() {
+  if (!_speechRecognitionSoportado || recognition) return;
+
+  recognition = new _SpeechRecognition();
+  recognition.lang = _idiomaVozActual();
+  recognition.interimResults = true;
+  recognition.continuous = true;
+
+  recognition.addEventListener('start', () => {
+    appState.isRecording = true;
+    _acumuladoTranscripcion = '';
+    _enviarAlDetener = false;
+    pttBtn.classList.add('ptt-btn--grabando');
+    pttBtn.setAttribute('aria-label', 'Escuchando... pulsa para detener');
+    const label = pttBtn.querySelector('.ptt-btn__etiqueta');
+    if (label) label.textContent = 'Escuchando...';
+    if (estadoAuri) estadoAuri.textContent = 'Te estoy escuchando...';
+  });
+
+  recognition.addEventListener('result', (event) => {
+    let transcripcionViva = '';
+
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      const texto = result[0].transcript;
+      if (result.isFinal) {
+        _acumuladoTranscripcion += texto;
+      } else {
+        transcripcionViva += texto;
+      }
+    }
+
+    const total = `${_acumuladoTranscripcion}${transcripcionViva}`.trim();
+    if (estadoAuri && total) {
+      estadoAuri.textContent = total.length > 80 ? total.slice(0, 77) + '...' : total;
+    }
+
+    _programarCortePorSilencio();
+  });
+
+  recognition.addEventListener('end', () => {
+    _limpiarTimerSilencio();
+    appState.isRecording = false;
+    pttBtn.classList.remove('ptt-btn--grabando');
+    pttBtn.setAttribute('aria-label', 'Pulsa para hablar');
+    const label = pttBtn.querySelector('.ptt-btn__etiqueta');
+    if (label) label.textContent = 'Hablar';
+
+    const textoFinal = _acumuladoTranscripcion.trim();
+    if (_enviarAlDetener && textoFinal && !_peticionEnCurso) {
+      _enviarAlDetener = false;
+      _acumuladoTranscripcion = '';
+      _añadirBurbujaChat('usuario', textoFinal);
+      procesarEntradaUsuario(textoFinal);
+      return;
+    }
+
+    _enviarAlDetener = false;
+    _acumuladoTranscripcion = '';
+    if (estadoAuri) estadoAuri.textContent = 'AURI te escucha';
+  });
+
+  recognition.addEventListener('error', (event) => {
+    _limpiarTimerSilencio();
+    appState.isRecording = false;
+    _enviarAlDetener = false;
+    pttBtn.classList.remove('ptt-btn--grabando');
+    const label = pttBtn.querySelector('.ptt-btn__etiqueta');
+    if (label) label.textContent = 'Hablar';
+    pttBtn.setAttribute('aria-label', 'Pulsa para hablar');
+    if (estadoAuri) estadoAuri.textContent = 'No pude escucharte, intenta de nuevo.';
+    console.error('[AURI] Error de reconocimiento:', event.error);
+  });
+
+  if (speechLangSelect) {
+    speechLangSelect.addEventListener('change', () => {
+      if (recognition && !appState.isRecording) {
+        recognition.lang = _idiomaVozActual();
+      }
+    });
+  }
+}
+
 /**
  * PLACEHOLDER – Fase 2.
  * Iniciará el reconocimiento de voz con la Web Speech API.
  * El equipo de Fase 2 debe reemplazar el cuerpo de esta función.
  */
 function iniciarReconocimientoVoz() {
-  console.log('Iniciando captura de voz... esperando código de fase 2');
-  // TODO (Fase 2): implementar SpeechRecognition / webkitSpeechRecognition
+  if (_peticionEnCurso) return;
+
+  _inicializarReconocimiento();
+
+  if (!_speechRecognitionSoportado || !recognition) {
+    reproducirAudioAgente('Tu navegador no soporta reconocimiento de voz.');
+    return;
+  }
+
+  if (appState.isRecording) return;
+
+  recognition.lang = _idiomaVozActual();
+  _enviarAlDetener = false;
+  _acumuladoTranscripcion = '';
+  _limpiarTimerSilencio();
+
+  try {
+    recognition.start();
+  } catch (e) {
+    console.warn('[AURI] No se pudo iniciar el micrófono:', e.message);
+  }
 }
 
 /**
@@ -259,7 +390,25 @@ function reproducirAudioAgente(texto) {
     estadoAuri.textContent = texto.length > 60 ? texto.slice(0, 57) + '…' : texto;
   }
 
-  // TODO (Fase 2): implementar SpeechSynthesis o audio generado por API
+  // Si está en mute, se mantiene solo salida visual y chat.
+  if (appState.isMuted || !('speechSynthesis' in window)) return;
+
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(texto);
+    const idioma = _idiomaVozActual();
+    utterance.lang = idioma;
+    utterance.volume = Math.max(0, Math.min(1, appState.volume / 100));
+
+    const voces = window.speechSynthesis.getVoices() || [];
+    const idiomaBase = idioma.split('-')[0];
+    const voz = voces.find(v => v.lang === idioma) || voces.find(v => v.lang?.startsWith(idiomaBase));
+    if (voz) utterance.voice = voz;
+
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn('[AURI] No se pudo reproducir voz:', err.message);
+  }
 }
 
 
@@ -472,7 +621,7 @@ async function procesarEntradaUsuario(texto) {
 
   const cuerpo = {
     // Instrucciones del sistema: identidad, cultura, ética y formato
-    system_instruction: {
+    systemInstruction: {
       parts: [{ text: construirSystemPrompt() }],
     },
     // Historial completo de la sesión (últimos N pares de turnos)
@@ -629,10 +778,11 @@ function _manejarErrorAPI(err, tipo = 'red') {
   };
 
   const fallback = mensajes[tipo] ?? mensajes.red;
+  const detalle = err?.message ? ` Detalle: ${String(err.message).slice(0, 140)}` : '';
 
   // Retorna el avatar a neutral y entrega el texto al pipeline de audio
   cambiarEstadoEmocional('neutral');
-  reproducirAudioAgente(fallback);
+  reproducirAudioAgente(fallback + (tipo === 'api' || tipo === 'transitorio' || tipo === 'formato' ? detalle : ''));
 }
 
 /**
@@ -653,8 +803,8 @@ function _setUIEsperando(esperando) {
     pttBtn.setAttribute('aria-label', 'AURI está pensando…');
     pttBtn.querySelector('.ptt-btn__etiqueta').textContent = 'AURI está pensando…';
   } else {
-    pttBtn.setAttribute('aria-label', 'Mantener presionado para hablar');
-    pttBtn.querySelector('.ptt-btn__etiqueta').textContent = 'Mantén presionado para hablar';
+    pttBtn.setAttribute('aria-label', 'Pulsa para hablar');
+    pttBtn.querySelector('.ptt-btn__etiqueta').textContent = 'Hablar';
   }
 }
 
@@ -686,28 +836,26 @@ triggerBtns.forEach(btn => {
 
 function activarGrabacion() {
   if (appState.isRecording) return;
-  appState.isRecording = true;
-  pttBtn.classList.add('ptt-btn--grabando');
-  pttBtn.setAttribute('aria-label', 'Grabando… suelta para enviar');
+  pttBtn.setAttribute('aria-label', 'Escuchando... pulsa para detener');
   iniciarReconocimientoVoz();
 }
 
 function desactivarGrabacion() {
   if (!appState.isRecording) return;
-  appState.isRecording = false;
-  pttBtn.classList.remove('ptt-btn--grabando');
-  pttBtn.setAttribute('aria-label', 'Mantener presionado para hablar');
-  console.log('Captura de voz detenida.');
-  // TODO (Fase 2): entregar el audio capturado al pipeline de transcripción
+  _limpiarTimerSilencio();
+  _enviarAlDetener = false;
+  try { recognition?.stop(); } catch (e) { }
+  console.log('Captura de voz detenida manualmente.');
 }
 
-// Soporte para mouse y touch
-pttBtn.addEventListener('mousedown',  activarGrabacion);
-pttBtn.addEventListener('touchstart', activarGrabacion, { passive: true });
-pttBtn.addEventListener('mouseup',    desactivarGrabacion);
-pttBtn.addEventListener('mouseleave', desactivarGrabacion);
-pttBtn.addEventListener('touchend',   desactivarGrabacion);
-pttBtn.addEventListener('touchcancel',desactivarGrabacion);
+// Botón Hablar: click para iniciar y click para detener.
+pttBtn.addEventListener('click', () => {
+  if (appState.isRecording) {
+    desactivarGrabacion();
+  } else {
+    activarGrabacion();
+  }
+});
 
 
 // ─────────────────────────────────────────────
