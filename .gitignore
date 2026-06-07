@@ -1,0 +1,33 @@
+# Credenciales y variables de entorno (CRÍTICO)
+.env
+.env.local
+config.js
+keys.js
+
+# Archivos del sistema operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Archivos de editores y configuraciones locales
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Módulos (En caso de añadir herramientas de build en el futuro)
+node_modules/

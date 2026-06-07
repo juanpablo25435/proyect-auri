@@ -1,0 +1,24 @@
+# Contexto del Proyecto
+El proyecto es una aplicación web de acompañamiento emocional para personas en proceso de duelo. 
+El sistema actúa como un Agente Social Interactivo no clínico. 
+El tono de cualquier texto generado (placeholders, logs, alertas) debe ser siempre empático, sereno, respetuoso y libre de optimismo tóxico o frases cliché.
+
+# Stack Tecnológico
+- Frontend: HTML5 semántico, CSS3 moderno (Flexbox/Grid, animaciones suaves) y JavaScript puro (Vanilla JS).
+- No utilices frameworks ni librerías externas (ni React, ni Vue, ni Tailwind, ni jQuery) a menos que se solicite explícitamente.
+- Integraciones: Web Speech API (nativa del navegador) y consumo de la API de Gemini mediante `fetch`.
+
+# Reglas de Código (HTML/CSS)
+- Mantén el diseño accesible: alto contraste, fuentes legibles y áreas táctiles grandes.
+- Usa variables CSS (`:root`) para manejar la paleta de colores (estados emocionales del avatar).
+- Evita IDs innecesarios; prioriza el uso de clases modulares.
+
+# Reglas de Código (JavaScript)
+- Usa ES6+ (let, const, arrow functions, destructuring, async/await).
+- Mantén la lógica modular en `app.js` separando las responsabilidades: UI, Manejo de Estado, API de Voz, API de LLM.
+- Maneja los errores de red y de las APIs de forma silenciosa y elegante, sin romper la interfaz del usuario.
+- Todos los comentarios en el código deben estar en español.
+
+# Seguridad y Buenas Prácticas
+- NUNCA expongas claves de API (API Keys) directamente en el código fuente.
+- Simula las llamadas a la API de LLM o asume que las credenciales vendrán de variables de entorno o configuraciones externas seguras.
