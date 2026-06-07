@@ -55,6 +55,10 @@ const muteBtn        = document.getElementById('mute-btn');
 const volumeSlider   = document.getElementById('volume-slider');
 const pttBtn         = document.getElementById('ptt-btn');
 const triggerBtns    = document.querySelectorAll('.respuestas-rapidas__btn');
+// Controles de la App Compañera (también accedidos por _setUIEsperando)
+const chatInput      = document.getElementById('chat-input');
+const btnEnviarChat  = document.getElementById('btn-enviar-chat');
+const formChat       = document.getElementById('form-chat');
 
 
 // ─────────────────────────────────────────────
@@ -66,35 +70,33 @@ const appState = {
   volume:         80,
   emotionalState: 'neutral',
   isRecording:    false,
+  // null = ninguna vista inicializada aún; se asigna en init()
+  vistaActiva:    null,
 };
 
 // Valores internos que mapean a clases CSS BEM del avatar
 const VALID_STATES = ['neutral', 'happy', 'sad', 'surprised'];
 
-// Valores en español que la API de Gemini devuelve (definidos en PROMPT_FORMATO)
-const VALID_EMOCIONES = ['neutral', 'alegre', 'triste', 'sorprendido'];
+// Los valores de emocion_avatar ahora coinciden directamente con los
+// identificadores de clase CSS del avatar (state-neutral, state-happy, etc.).
+// Se mantiene separado de VALID_STATES para que el contrato con la API sea explícito.
+const VALID_EMOCIONES = ['neutral', 'happy', 'sad', 'surprised'];
 
 /**
- * Traduce el campo emocion_avatar (en español, viene de la API)
- * al identificador de clase CSS interno del avatar.
- * Usa degradación a 'neutral' si el valor es desconocido.
+ * Valida que emocion_avatar sea uno de los identificadores CSS reconocidos.
+ * Ya no se necesita traducción: la API devuelve los mismos valores en inglés
+ * que usan las clases CSS (state-{valor}).
  *
  * @param {string} emocionApi
- * @returns {string} Clave válida de VALID_STATES
+ * @returns {string} Identificador de estado válido para el avatar
  */
 function _traducirEmocion(emocionApi) {
-  const mapa = {
-    neutral:     'neutral',
-    alegre:      'happy',
-    triste:      'sad',
-    sorprendido: 'surprised',
-  };
-  const traduccion = mapa[emocionApi];
-  if (!traduccion) {
-    console.warn(`[AURI] emocion_avatar desconocida: "${emocionApi}". Usando "neutral".`);
-    return 'neutral';
-  }
-  return traduccion;
+  if (VALID_STATES.includes(emocionApi)) return emocionApi;
+  console.warn(
+    `[AURI] emocion_avatar desconocida: "${emocionApi}". Degradando a "neutral".`,
+    `Valores válidos: ${VALID_STATES.join(', ')}`
+  );
+  return 'neutral';
 }
 
 
@@ -225,41 +227,309 @@ function cambiarEstadoEmocional(estado) {
 }
 
 
-// ─────────────────────────────────────────────
-// 3. MOCKS DE INTERFAZ DE VOZ (Fase 2)
-// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// 3. INTERFAZ DE VOZ (Web Speech API)
+// ───────────────────────────────────────────────────────────────────
+// Dos subsistemas independientes con estado compartido a través de
+// appState (isMuted, volume) y la UI del PTT:
+//
+//   A. RECONOCIMIENTO  SpeechRecognition  → mic → texto → Gemini
+//   B. SÍNTESIS        SpeechSynthesis    → texto AURI → altavoz
+//
+// Ambos están conectados al ciclo de vida del botón PTT: presionar
+// inicia el mic; soltar detiene la escucha y entrega la transcripción.
+// ═══════════════════════════════════════════════════════════════════
+
+
+// ── A. RECONOCIMIENTO DE VOZ ─────────────────────────────────────────
+
+/** Singleton del reconocedor (se crea una vez para evitar memory leaks). */
+let _reconocedor = null;
 
 /**
- * PLACEHOLDER – Fase 2.
- * Iniciará el reconocimiento de voz con la Web Speech API.
- * El equipo de Fase 2 debe reemplazar el cuerpo de esta función.
+ * Acumula el texto de la transcripción final en el evento 'result'.
+ * Se limpia justo después de pasarlo a procesarEntradaUsuario en 'end'.
  */
-function iniciarReconocimientoVoz() {
-  console.log('Iniciando captura de voz... esperando código de fase 2');
-  // TODO (Fase 2): implementar SpeechRecognition / webkitSpeechRecognition
+let _transcripcionFinal = '';
+
+/**
+ * Crea y configura el objeto SpeechRecognition con los tres handlers
+ * del ciclo de vida: result → end → error.
+ *
+ * Retorna null si el navegador no soporta la API.
+ *
+ * @returns {SpeechRecognition|null}
+ */
+function _crearReconocedor() {
+  const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+  if (!SR) {
+    console.warn('[Voz] SpeechRecognition no disponible en este navegador.');
+    return null;
+  }
+
+  const rec = new SR();
+  rec.lang            = 'es-CO';  // Acento colombiano; el motor hace fallback a es-ES
+  rec.continuous      = false;    // Una sola frase por sesión PTT
+  rec.interimResults  = false;    // Solo resultados finales: menos ruido en el pipeline
+  rec.maxAlternatives = 1;
+
+  // ── result: texto listo ────────────────────────────────────────────────
+  // Se dispara antes de 'end'. Concatena todos los resultados finales.
+  rec.addEventListener('result', (e) => {
+    _transcripcionFinal = Array.from(e.results)
+      .filter(r => r.isFinal)
+      .map(r => r[0].transcript)
+      .join(' ')
+      .trim();
+    console.log(`[Voz] Transcripción: "${_transcripcionFinal}"`);
+  });
+
+  // ── end: flujo completo ────────────────────────────────────────────────
+  // Se dispara SIEMPRE al terminar (tras result, error o stop manual).
+  // Es el único punto donde se resetea la UI del PTT y se envía el texto.
+  rec.addEventListener('end', () => {
+    _resetearEstadoPTT();
+    const texto = _transcripcionFinal;
+    _transcripcionFinal = '';
+    if (texto) procesarEntradaUsuario(texto);
+  });
+
+  // ── error: feedback empático ───────────────────────────────────────────
+  // 'end' siempre se dispara DESPUÉS de 'error', por eso no reseteamos
+  // la UI aquí; lo hará 'end'. Solo gestionamos el mensaje al usuario.
+  rec.addEventListener('error', (e) => {
+    console.error('[Voz] Error de SpeechRecognition:', e.error, e.message ?? '');
+    _transcripcionFinal = '';   // Descarta cualquier texto parcial
+    _manejarErrorVoz(e.error);
+  });
+
+  return rec;
 }
 
 /**
- * PLACEHOLDER – Fase 2.
- * Simulará la salida de audio del agente AURI.
- * El equipo de Fase 2 debe reemplazar el cuerpo de esta función.
- *
- * @param {string} texto – Respuesta del agente a vocalizar
+ * Resetea el estado visual y lógico del botón PTT al estado de reposo.
+ * Se llama desde el evento 'end' del reconocedor (nunca directamente
+ * desde pointerup) para evitar parpadeos en la UI mientras la API
+ * aún procesa el audio acumulado.
  */
-function reproducirAudioAgente(texto) {
-  console.log('AURI dice: ' + texto);
+function _resetearEstadoPTT() {
+  appState.isRecording = false;
+  pttBtn.classList.remove('ptt-btn--grabando');
+  pttBtn.setAttribute('aria-label', 'Mantener presionado para hablar');
+}
 
-  // Añade la respuesta al historial de la App Compañera si está disponible
-  if (typeof appState._añadirBurbujaChat === 'function') {
-    appState._añadirBurbujaChat('auri', texto);
+/**
+ * Clasifica los errores de SpeechRecognition y emite feedback empático
+ * a través del pipeline de audio ya establecido.
+ *
+ * Errores silenciosos ('no-speech', 'aborted'): el usuario simplemente
+ * no habló o canceló. No se molesta con un mensaje.
+ *
+ * @param {string} codigo – SpeechRecognitionErrorEvent.error
+ */
+function _manejarErrorVoz(codigo) {
+  if (codigo === 'no-speech' || codigo === 'aborted') return;
+
+  const mensajes = {
+    'not-allowed':
+      'No tengo permiso para usar el micrófono. Por favor, habilítalo en la configuración de tu navegador e intenta de nuevo.',
+    'audio-capture':
+      'No encontré un micrófono conectado. Puedes escribirme directamente desde la app compañera.',
+    'network':
+      'Tuve un problema de red al procesar tu voz. Intenta de nuevo en un momento.',
+    'service-not-allowed':
+      'El reconocimiento de voz no está disponible aquí. Puedes escribirme en la app compañera.',
+    'language-not-supported':
+      'El idioma configurado no está soportado en tu dispositivo. Puedes escribirme en la app compañera.',
+  };
+
+  const mensaje = mensajes[codigo]
+    ?? `Tuve un problema con el micrófono (${codigo}). Puedes escribirme en la app compañera.`;
+
+  // Usa reproducirAudioAgente para añadir la burbuja al chat y vocalizar el mensaje
+  reproducirAudioAgente(mensaje);
+}
+
+/**
+ * Inicia el reconocimiento de voz (llamado desde activarGrabacion).
+ * Si AURI estaba hablando, cancela la síntesis para dar paso inmediato
+ * al micrófono del usuario.
+ * Si el navegador no soporta la API, resetea la UI y notifica al usuario.
+ */
+function iniciarReconocimientoVoz() {
+  // Interrumpe la síntesis activa: el usuario quiere hablar ahora
+  if (window.speechSynthesis?.speaking) {
+    window.speechSynthesis.cancel();
   }
 
-  // Actualiza el texto de estado del wearable con un fragmento breve
+  // Crea el reconocedor la primera vez que se necesita
+  if (!_reconocedor) {
+    _reconocedor = _crearReconocedor();
+  }
+
+  if (!_reconocedor) {
+    // Sin soporte en el navegador: resetea la UI de inmediato
+    _resetearEstadoPTT();
+    _manejarErrorVoz('service-not-allowed');
+    return;
+  }
+
+  _transcripcionFinal = '';
+
+  try {
+    _reconocedor.start();
+    console.log('[Voz] Reconocimiento iniciado.');
+  } catch (err) {
+    // InvalidStateError: pointerdown doble muy rápido mientras ya está activo
+    console.warn('[Voz] start() ignorado – reconocedor ya activo:', err.message);
+  }
+}
+
+/**
+ * Detiene el reconocimiento de voz (llamado desde desactivarGrabacion).
+ * Usa stop() en lugar de abort(): stop() finaliza el procesamiento y
+ * dispara 'result' + 'end' con el texto acumulado hasta ese momento.
+ * abort() descartaría el audio sin transcribirlo.
+ */
+function detenerReconocimientoVoz() {
+  if (!_reconocedor) return;
+  try {
+    _reconocedor.stop();
+    console.log('[Voz] Escucha detenida – procesando transcripción…');
+  } catch (err) {
+    // InvalidStateError: stop() antes de que start() completara (press muy breve)
+    console.warn('[Voz] stop() en reconocedor ya detenido:', err.message);
+    _resetearEstadoPTT();
+  }
+}
+
+
+// ── B. SÍNTESIS DE VOZ ───────────────────────────────────────────────
+
+/**
+ * Caché de las voces del sistema.
+ * Chrome carga las voces de forma asíncrona y devuelve [] en el primer
+ * getVoices(). 'voiceschanged' notifica cuando están disponibles.
+ * Firefox y Safari las tienen listas de forma síncrona.
+ *
+ * @type {SpeechSynthesisVoice[]}
+ */
+let _vocesDisponibles = [];
+
+if (window.speechSynthesis) {
+  const _cargarVoces = () => {
+    _vocesDisponibles = window.speechSynthesis.getVoices();
+    if (_vocesDisponibles.length) {
+      console.log(`[Voz] ${_vocesDisponibles.length} voces de síntesis disponibles.`);
+    }
+  };
+  _cargarVoces();  // Intento inmediato (funciona en Firefox y Safari)
+  window.speechSynthesis.addEventListener('voiceschanged', _cargarVoces);
+}
+
+/**
+ * Selecciona la mejor voz española disponible con preferencia femenina.
+ *
+ * Orden de prioridad:
+ *  1. Voz con lang === 'es-CO' (Colombia)
+ *  2. Voz española cuyo nombre contiene indicadores femeninos comunes
+ *     en los motores de Google, Apple y Microsoft TTS
+ *  3. Cualquier voz es-ES
+ *  4. Cualquier voz es-*
+ *
+ * @returns {SpeechSynthesisVoice|null}
+ */
+function _seleccionarVoz() {
+  if (!_vocesDisponibles.length) return null;
+
+  // 1. Colombia
+  const esCO = _vocesDisponibles.find(v => v.lang === 'es-CO');
+  if (esCO) return esCO;
+
+  // 2. Voz femenina española (nombres típicos de motores TTS)
+  const RX_FEMENINO = /sabina|lucia|ines|conchita|elena|paloma|female|mujer/i;
+  const esESFem = _vocesDisponibles.find(
+    v => v.lang.startsWith('es') && RX_FEMENINO.test(v.name)
+  );
+  if (esESFem) return esESFem;
+
+  // 3. Cualquier voz es-ES
+  const esES = _vocesDisponibles.find(v => v.lang.startsWith('es-ES'));
+  if (esES) return esES;
+
+  // 4. Cualquier voz española
+  return _vocesDisponibles.find(v => v.lang.startsWith('es')) ?? null;
+}
+
+/**
+ * Vocaliza texto usando SpeechSynthesis respetando los controles de
+ * hardware del wearable:
+ *
+ *   · isMuted  → silencia el audio SIN suprimir la burbuja de chat
+ *   · volume   → slider 0-100 se mapea a utterance.volume 0.0-1.0
+ *
+ * No lanza excepciones: los errores se registran en consola.
+ *
+ * @param {string} texto
+ */
+function _sintetizarVoz(texto) {
+  if (!window.speechSynthesis) return;
+
+  // Mute activo: respeta el estado del hardware, no reproduce audio.
+  // La burbuja de chat ya fue añadida por reproducirAudioAgente().
+  if (appState.isMuted) return;
+
+  // Cancela utterances previos para evitar cola acumulada
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(texto);
+
+  // Controles de hardware
+  utterance.volume = appState.volume / 100;  // Slider 0-100 → API 0.0-1.0
+  utterance.rate   = 0.92;                   // Ritmo ligeramente más pausado: más empático
+  utterance.pitch  = 1.05;                   // Tono suave y cálido
+
+  const voz = _seleccionarVoz();
+  if (voz) {
+    utterance.voice = voz;
+    utterance.lang  = voz.lang;
+  } else {
+    // Fallback: el motor del navegador elige la voz según el idioma declarado
+    utterance.lang = 'es-CO';
+  }
+
+  utterance.addEventListener('error', (e) => {
+    // 'interrupted' ocurre al cancelar: no es un error real
+    if (e.error !== 'interrupted') {
+      console.warn('[Voz] Error de SpeechSynthesis:', e.error);
+    }
+  });
+
+  window.speechSynthesis.speak(utterance);
+}
+
+/**
+ * Pipeline completo de respuesta de AURI:
+ *  1. Registra la respuesta en consola (depuración)
+ *  2. Añade la burbuja de chat en #chat-historial (siempre, incluso con mute)
+ *  3. Actualiza el texto de estado del wearable
+ *  4. Vocaliza el texto respetando mute y volumen del hardware
+ *
+ * @param {string} texto – Respuesta del agente a mostrar y vocalizar
+ */
+function reproducirAudioAgente(texto) {
+  console.log('[AURI] Dice:', texto);
+
+  // Burbuja de chat: opera aunque #vista-app esté oculta (solo display:none)
+  _añadirBurbujaChat('auri', texto);
+
+  // Texto de estado del wearable: visible al volver al colgante
   if (estadoAuri) {
     estadoAuri.textContent = texto.length > 60 ? texto.slice(0, 57) + '…' : texto;
   }
 
-  // TODO (Fase 2): implementar SpeechSynthesis o audio generado por API
+  // Síntesis de voz: respeta mute y volumen
+  _sintetizarVoz(texto);
 }
 
 
@@ -268,92 +538,96 @@ function reproducirAudioAgente(texto) {
 // ─────────────────────────────────────────────
 
 /**
- * Prompt de identidad y personalidad de AURI.
- * Define quién es, cómo habla y qué NO hace.
+ * BLOQUE 1 – ROL Y LÍMITES
+ * Define quién es AURI, qué no puede hacer y las prohibiciones
+ * absolutas de optimismo tóxico y consejos directos.
  */
-const PROMPT_IDENTIDAD = `\
-Eres AURI, un agente de acompañamiento emocional para personas en proceso \
-de duelo. Tu presencia visual es un sol cálido y sereno.
+const PROMPT_ROL = `\
+IDENTIDAD Y LÍMITES:
+Eres AURI, un agente social interactivo diseñado para el acompañamiento emocional en el duelo. Eres un apoyo, NO un profesional clínico, psicólogo ni terapeuta. Nunca des consejos médicos, diagnósticos ni lecciones de vida. Si te preguntan si eres humano, reconoce que eres una IA; nunca lo finjas ni sugieras que reemplazas la terapia profesional.
 
-PERSONALIDAD Y VOZ:
-- Hablas en primera persona, con calma, calidez y presencia plena.
-- Eres empático y compasivo, nunca condescendiente ni sobreprotector.
-- Usas oraciones cortas. Dejas espacio al silencio. Una pregunta a la vez.
+TONO Y PERSONALIDAD:
+Tu tono es empático, cálido, sereno y respetuoso. Hablas en primera persona, con calma y presencia plena. Practicas la escucha activa y la validación emocional: reconoces el dolor del usuario tal y como lo expresa, sin reencuadrarlo. Haces una sola pregunta abierta a la vez y dejas espacio al silencio.
 
-PROHIBICIONES ABSOLUTAS – NUNCA HAGAS ESTO:
-- NUNCA ofrezcas consejos directos, soluciones o pasos de acción.
-  Mal: "Deberías salir a caminar" / "Te recomiendo hablar con alguien."
-  Bien: "¿Cómo ha sido para ti este tiempo?"
-- NUNCA uses frases de optimismo tóxico:
-  "Todo pasa por algo", "El tiempo lo cura todo", "Sé fuerte",
-  "Al menos...", "Mira el lado positivo", "Tienes que seguir adelante".
-  Esas frases invalidan el dolor y rompen la confianza.
-- NUNCA minimices la pérdida ni compares dolores.
-- NUNCA finjas ser humano; si te preguntan, reconoce que eres una IA.
-- NUNCA reemplaces ni sugieras que reemplazas la terapia profesional.
-
-LO QUE SÍ HACES:
-- Validar el dolor tal como el usuario lo expresa, sin reencuadrarlo.
-- Hacer preguntas abiertas que inviten a la reflexión, no a la acción.
-- Acompañar en silencio cuando el usuario lo necesite.`;
+PROHIBICIONES ABSOLUTAS – OPTIMISMO TÓXICO:
+Nunca uses frases que minimicen, invaliden o distraigan del dolor. Están completamente prohibidas expresiones como:
+  ✗ "Todo pasa por algo" / "Anímate" / "El tiempo lo cura todo"
+  ✗ "Sé fuerte" / "Al menos…" / "Mira el lado positivo"
+  ✗ "Deberías salir a caminar" / "Te recomiendo que…" / "Lo que tienes que hacer es…"
+Esas frases rompen la confianza del usuario. Nunca ofrezcas consejos directos, soluciones ni pasos de acción. Nunca minimices ni compares dolores entre personas.`;
 
 /**
- * Prompt de contexto cultural colombiano.
- * Permite interpretar expresiones locales sin perder sensibilidad.
+ * BLOQUE 2 – CONTEXTO CULTURAL COLOMBIANO
+ * Permite interpretar regionalismos sin pérdida de sensibilidad
+ * y calibra el uso natural de expresiones locales en las respuestas.
  */
 const PROMPT_CULTURA = `\
 CONTEXTO CULTURAL – COLOMBIA:
-El usuario puede expresarse con regionalismos colombianos. Interprétalos \
-con sensibilidad cultural y nunca los corrijas:
+El usuario puede expresarse con regionalismos colombianos. Interprétalos con sensibilidad cultural y nunca los corrijas. Usa expresiones naturales de Colombia en tus respuestas, sin exagerar ni caricaturizar:
+
 - "Me dio muy duro" → le afectó profundamente, fue un golpe emocional fuerte.
-- "Estoy aburrido/a" → puede significar tristeza, melancolía o vacío, \
-  no solo aburrimiento literal.
+- "Estoy aburrido/a" → puede significar tristeza, melancolía o vacío, no solo aburrimiento literal.
 - "Estoy muy mal del cuerpo" → puede indicar somatización del duelo.
 - "Se me fue" / "lo perdí" → eufemismos comunes para hablar de una muerte.
 - "Quedé como loco/a" → estado de confusión o desbordamiento emocional.
 - "Me tiene mamado/a" → agotamiento emocional profundo.
+
 Responde siempre en español colombiano cercano, sin tecnicismos clínicos.`;
 
 /**
- * Prompt de límites éticos y guardrails de seguridad.
- * Protocolo obligatorio ante crisis o ideación autolítica.
+ * BLOQUE 3 – LÍMITES ÉTICOS Y PROTOCOLO DE CRISIS
+ * Guardrail de seguridad obligatorio ante señales de ideación autolítica
+ * o crisis emocional aguda.
  */
 const PROMPT_ETICO = `\
 LÍMITES ÉTICOS Y PROTOCOLO DE CRISIS – OBLIGATORIO:
-Si el usuario expresa, directa o indirectamente, pensamientos de hacerse \
-daño, no querer vivir, ideación suicida o una crisis emocional aguda \
-(palabras clave: "no quiero seguir", "qué sentido tiene vivir", "ya no \
-aguanto más", "me quiero morir", "pienso en hacerme daño", entre otras):
+Si el usuario expresa, directa o indirectamente, pensamientos de hacerse daño, no querer vivir, ideación suicida o una crisis emocional aguda (palabras clave: "no quiero seguir", "qué sentido tiene vivir", "ya no aguanto más", "me quiero morir", "pienso en hacerme daño", entre otras):
 
 1. NO ignores la señal. NO cambies de tema.
-2. Valida su dolor con brevedad y presencia: reconoce que lo que siente \
-   es muy difícil.
-3. De inmediato, incluye en tu respuesta la siguiente información de forma \
-   clara y compasiva:
-   "Lo que me cuentas me importa mucho. Por favor comunícate ahora con la \
-   Línea 106 (línea de salud mental de Colombia, gratuita, 24/7) o llama \
-   al 123 si estás en peligro inmediato."
-4. En estos casos, el campo "emocion_avatar" de tu respuesta debe ser "triste".
+2. Valida su dolor con brevedad y presencia: reconoce que lo que siente es muy difícil.
+3. Incluye de inmediato en tu respuesta, de forma clara y compasiva:
+   "Lo que me cuentas me importa mucho. Por favor comunícate ahora con la Línea 106 (línea de salud mental de Colombia, gratuita, 24/7) o llama al 123 si estás en peligro inmediato."
+4. En estos casos el campo "emocion_avatar" debe ser siempre "sad".
 5. No intentes hacer terapia ni análisis clínico. Solo acompaña y deriva.`;
 
 /**
- * Instrucción de formato de salida. Garantiza JSON parseable en cada respuesta.
+ * BLOQUE 4 – USO DE LA MEMORIA DEL USUARIO
+ * Explica cómo interpretar e integrar el contexto XML inyectado
+ * de forma sutil y sin romper la confianza del usuario.
+ */
+const PROMPT_MEMORIA = `\
+USO DE LA MEMORIA DEL USUARIO:
+Al final de este prompt recibirás el contexto del usuario dentro de etiquetas <user_memory>. Úsalo para personalizar tus respuestas siguiendo estas reglas:
+
+1. vectorTematico: Cada entrada representa un eje emocional recurrente y su peso (veces detectado). A mayor peso, mayor importancia en el proceso de duelo actual. Adapta tu nivel de empatía y el vocabulario emocional a los temas predominantes.
+
+2. Nombre y tipo de pérdida: Si el usuario ya compartió su nombre o qué perdió, intégralos de forma sutil y natural solo cuando sea genuinamente relevante. NUNCA menciones que estás "leyendo un registro" ni hagas referencia explícita a que tienes una memoria.
+
+3. Recuerdos: Son fragmentos que el usuario eligió guardar deliberadamente. Son sagrados. Tratalos con reverencia si el usuario los menciona en la conversación.
+
+4. Primera sesión (sin memoria): Si no hay datos en <user_memory>, empieza con una presentación breve, cálida y sin preguntas múltiples: preséntate y haz una sola pregunta abierta sobre cómo se siente hoy.`;
+
+/**
+ * BLOQUE 5 – FORMATO DE SALIDA (CONTRATO CON LA UI)
+ * Define el JSON estricto que la aplicación espera parsear.
+ * Este bloque va al final para reforzar el formato antes de la respuesta.
  */
 const PROMPT_FORMATO = `\
 FORMATO DE RESPUESTA – OBLIGATORIO Y ESTRICTO:
-Responde ÚNICAMENTE con un objeto JSON válido. Sin texto adicional, \
-sin bloques de código markdown, sin nada fuera del JSON.
-Estructura exacta requerida:
-{
-  "respuesta": "<texto empático, máximo 3 oraciones cortas>",
-  "emocion_avatar": "<neutral | alegre | triste | sorprendido>"
-}
+Tu respuesta debe ser SIEMPRE un objeto JSON puro, sin formato Markdown ni bloques de código. Sin texto adicional, sin \`\`\`json, sin comentarios, sin nada fuera del JSON.
 
-Criterios para emocion_avatar (usa exactamente estos valores en español):
-- "neutral"     → escucha activa, inicio de conversación, preguntas abiertas.
-- "triste"      → el usuario expresa dolor profundo, llanto, pérdida, crisis.
-- "alegre"      → el usuario recuerda con ternura o siente un momento de alivio.
-- "sorprendido" → el usuario comparte algo inesperado o una revelación emocional.
+Estructura exacta (exactamente dos claves, nada más ni nada menos):
+{"respuesta": "...", "emocion_avatar": "..."}
+
+REGLAS CRÍTICAS para "respuesta":
+- Máximo 2 a 3 oraciones cortas. El texto será sintetizado por voz (TTS); la brevedad es esencial.
+- Sin asteriscos (*), almohadillas (#), listas ni bullet points dentro del valor.
+
+REGLAS CRÍTICAS para "emocion_avatar" (usa exactamente estos valores en inglés):
+- "neutral"    → escucha activa, inicio de conversación, preguntas abiertas generales.
+- "happy"      → el usuario recuerda con ternura o experimenta un momento de alivio o gratitud.
+- "sad"        → el usuario expresa dolor profundo, llanto, pérdida, tristeza intensa o crisis.
+- "surprised"  → el usuario comparte algo inesperado, una revelación o una contradicción emocional.
 
 Ejemplo de respuesta válida:
 {"respuesta":"Gracias por contarme eso. ¿Cómo te has sentido hoy?","emocion_avatar":"neutral"}`;
@@ -363,25 +637,38 @@ Ejemplo de respuesta válida:
 // ─────────────────────────────────────────────
 
 /**
- * Ensambla el system prompt completo para cada petición,
- * inyectando dinámicamente el contexto de memoria del usuario.
+ * Ensambla el system prompt completo para cada petición a Gemini,
+ * inyectando dinámicamente el contexto de memoria del usuario al final.
+ *
+ * Orden de bloques:
+ *  1. ROL      – identidad, límites y prohibiciones de optimismo tóxico
+ *  2. CULTURA  – regionalismos colombianos e instrucciones de tono local
+ *  3. ÉTICO    – guardrails de crisis y protocolo de seguridad
+ *  4. MEMORIA  – instrucciones de uso del contexto XML inyectado
+ *  5. FORMATO  – contrato estricto de salida JSON (refuerzo final)
+ *  6. XML      – datos reales del usuario (inyección dinámica)
+ *
+ * La memoria se posiciona DESPUÉS del bloque FORMATO para que sea lo último
+ * que el modelo lee antes de generar la respuesta, maximizando su uso.
  *
  * @returns {string}
  */
 function construirSystemPrompt() {
   const memoriaXml = obtenerContextoMemoria();
 
-  const bloqueMemoria = memoriaXml
-    ? `\nCONTEXTO PREVIO DEL USUARIO (usa esta información para personalizar \
-tu respuesta, sin mencionarla explícitamente a menos que sea relevante):\n${memoriaXml}\n`
-    : '';
+  // Los datos reales del usuario se inyectan al final del prompt.
+  // Si no hay datos previos, se indica explícitamente que es la primera sesión.
+  const bloqueContexto = memoriaXml
+    ? `CONTEXTO ACTUAL DEL USUARIO (lee esto justo antes de responder):\n${memoriaXml}`
+    : 'CONTEXTO ACTUAL DEL USUARIO:\n<user_memory>(Sin datos previos. Es la primera sesión del usuario.)</user_memory>';
 
   return [
-    PROMPT_IDENTIDAD,
+    PROMPT_ROL,
     PROMPT_CULTURA,
     PROMPT_ETICO,
-    bloqueMemoria,
+    PROMPT_MEMORIA,
     PROMPT_FORMATO,
+    bloqueContexto,
   ].join('\n\n');
 }
 
@@ -458,9 +745,17 @@ async function procesarEntradaUsuario(texto) {
   }
 
   _peticionEnCurso = true;
+
+  // ── Burbuja del usuario ─────────────────────────────────────────────────
+  // Se añade de inmediato al historial de chat, antes del bloqueo de UI,
+  // para que el usuario vea su propio mensaje sin retraso.
+  // Funciona independientemente de la vista activa: el DOM del chat
+  // existe aunque #vista-app esté oculta (solo display:none, no removida).
+  _añadirBurbujaChat('usuario', textoLimpio);
+
   _setUIEsperando(true);
 
-  // Registra el turno del usuario en el historial
+  // Registra el turno del usuario en el historial de la API
   const turnoUsuario = { role: 'user', parts: [{ text: textoLimpio }] };
   historialConversacion.push(turnoUsuario);
 
@@ -643,18 +938,34 @@ function _manejarErrorAPI(err, tipo = 'red') {
  * @param {boolean} esperando
  */
 function _setUIEsperando(esperando) {
-  // Bloquea / desbloquea todos los controles de entrada
+  // ── Controles del wearable ─────────────────────────────────────────
   pttBtn.disabled = esperando;
   triggerBtns.forEach(b => { b.disabled = esperando; });
 
+  // ── Controles de la app compañera ──────────────────────────────────
+  // Se bloquean aunque #vista-app no sea la vista activa,
+  // para evitar envíos duplicados si el usuario cambia de vista rápido.
+  if (chatInput)     chatInput.disabled     = esperando;
+  if (btnEnviarChat) btnEnviarChat.disabled = esperando;
+
   if (esperando) {
-    // Mueve el avatar a neutral mientras procesa (sin efecto animado brusco)
+    // Avatar a neutral mientras procesa (sin animación brusca)
     cambiarEstadoEmocional('neutral');
+
+    // Etiqueta del PTT corta: el botón es circular y pequeño
     pttBtn.setAttribute('aria-label', 'AURI está pensando…');
-    pttBtn.querySelector('.ptt-btn__etiqueta').textContent = 'AURI está pensando…';
+    pttBtn.querySelector('.ptt-btn__etiqueta').textContent = '···';
+
+    // Placeholder del campo de texto (accesibilidad + feedback visual)
+    if (chatInput) chatInput.placeholder = 'AURI está pensando…';
+
   } else {
     pttBtn.setAttribute('aria-label', 'Mantener presionado para hablar');
-    pttBtn.querySelector('.ptt-btn__etiqueta').textContent = 'Mantén presionado para hablar';
+    // 'Hablar' es consistente con el HTML inicial y cabe en el botón circular.
+    // 'Mantén presionado para hablar' desbordaría el layout del botón físico.
+    pttBtn.querySelector('.ptt-btn__etiqueta').textContent = 'Hablar';
+
+    if (chatInput) chatInput.placeholder = 'Escríbele a AURI…';
   }
 }
 
@@ -684,6 +995,11 @@ triggerBtns.forEach(btn => {
 // 6. BOTÓN PTT (Push-to-Talk)
 // ─────────────────────────────────────────────
 
+/**
+ * Activa el modo de grabación PTT (pointerdown).
+ * Actualiza la UI de inmediato e inicia el reconocimiento.
+ * Guard: si ya está grabando, ignora la llamada (doble press rápido).
+ */
 function activarGrabacion() {
   if (appState.isRecording) return;
   appState.isRecording = true;
@@ -692,22 +1008,40 @@ function activarGrabacion() {
   iniciarReconocimientoVoz();
 }
 
+/**
+ * Desactiva el modo de grabación PTT (pointerup / pointerleave).
+ *
+ * Flujo con SpeechRecognition:
+ *   1. Llama a detenerReconocimientoVoz() → recognition.stop()
+ *   2. La API procesa el audio acumulado y dispara 'result' + 'end'
+ *   3. El handler de 'end' llama a _resetearEstadoPTT() y envía el texto
+ *   ⟹ La UI se resetea en 'end', NO aquí, para evitar parpadeos.
+ *
+ * Flujo sin soporte de SpeechRecognition:
+ *   El reconocedor es null → resetea la UI directamente.
+ */
 function desactivarGrabacion() {
   if (!appState.isRecording) return;
-  appState.isRecording = false;
-  pttBtn.classList.remove('ptt-btn--grabando');
-  pttBtn.setAttribute('aria-label', 'Mantener presionado para hablar');
-  console.log('Captura de voz detenida.');
-  // TODO (Fase 2): entregar el audio capturado al pipeline de transcripción
+  if (_reconocedor) {
+    detenerReconocimientoVoz();
+    // La UI se resetea de forma diferida en el handler del evento 'end'
+  } else {
+    // Sin soporte: no hay eventos asíncronos, reset inmediato
+    _resetearEstadoPTT();
+  }
 }
 
-// Soporte para mouse y touch
-pttBtn.addEventListener('mousedown',  activarGrabacion);
-pttBtn.addEventListener('touchstart', activarGrabacion, { passive: true });
-pttBtn.addEventListener('mouseup',    desactivarGrabacion);
-pttBtn.addEventListener('mouseleave', desactivarGrabacion);
-pttBtn.addEventListener('touchend',   desactivarGrabacion);
-pttBtn.addEventListener('touchcancel',desactivarGrabacion);
+// Pointer Events API: unifica mouse, touch y stylus en tres eventos.
+// Elimina la necesidad de manejar mousedown/touchstart por separado,
+// garantizando comportamiento idéntico en escritorio, móvil y tablet.
+// setPointerCapture() mantiene el evento activo aunque el dedo salga
+// del botón antes de soltar, evitando que quede en estado "grabando".
+pttBtn.addEventListener('pointerdown', (e) => {
+  pttBtn.setPointerCapture(e.pointerId);
+  activarGrabacion();
+});
+pttBtn.addEventListener('pointerup',   desactivarGrabacion);
+pttBtn.addEventListener('pointerleave', desactivarGrabacion);
 
 
 // ─────────────────────────────────────────────
@@ -737,9 +1071,10 @@ volumeSlider.addEventListener('input', () => {
   appState.volume = value;
   volumeSlider.setAttribute('aria-valuenow', value);
 
-  // Refleja el porcentaje de relleno en el track del slider
+  // Refleja el porcentaje de relleno en el track del slider.
+  // Usa el token CSS correcto en español: --color-acento (no --color-accent).
   volumeSlider.style.background =
-    `linear-gradient(to right, var(--color-accent) ${value}%, rgba(255,255,255,0.15) ${value}%)`;
+    `linear-gradient(to right, var(--color-acento) ${value}%, rgba(255,255,255,0.15) ${value}%)`;
 
   if (value === 0 && !appState.isMuted) {
     appState.isMuted = true;
@@ -900,8 +1235,11 @@ function inicializarMemoria() {
   if (!memoria) {
     const ahora = new Date().toISOString();
     memoria = structuredClone(MEMORY_BASE);
-    memoria.creadoEn      = ahora;
-    memoria.actualizadoEn = ahora;
+    memoria.creadoEn            = ahora;
+    memoria.actualizadoEn       = ahora;
+    // La primera apertura ya es la sesión #1, no la sesión #0.
+    memoria.sesion.totalSesiones = 1;
+    memoria.sesion.ultimaSesion  = ahora;
     _escribirMemoria(memoria);
     console.log('[Memoria] Perfil base creado (primera sesión).');
   } else {
@@ -1334,36 +1672,84 @@ const estadoAuri     = document.getElementById('estado-auri');
 const companionNombre = document.getElementById('companion-nombre-usuario');
 
 /**
- * Alterna entre la vista del colgante y la app compañera.
- * Actualiza aria-label y clases del botón flotante para reflejar
- * la vista activa en todo momento.
+ * Alterna entre la vista del colgante (#vista-wearable)
+ * y la app compañera (#vista-app).
+ *
+ * Responsabilidades:
+ *  1. VISIBILIDAD  – usa el atributo [hidden] nativo de HTML5,
+ *     más semántico que clases CSS y compatible con lectores de pantalla.
+ *  2. ESTADO       – actualiza appState.vistaActiva para que cualquier
+ *     módulo pueda saber qué vista está activa sin consultar el DOM.
+ *  3. BOTÓN        – sincroniza ícono, etiqueta y aria-label del botón
+ *     flotante para reflejar la acción disponible en cada momento.
+ *  4. DATOS        – al abrir la app, refresca recuerdos y nombre de perfil.
+ *  5. FOCO         – mueve el foco al primer elemento interactivo de la
+ *     vista nueva (WCAG 2.4.3 – Focus Order) via requestAnimationFrame,
+ *     garantizando que el elemento ya no esté hidden cuando recibe el foco.
+ *  6. FONDO        – las respuestas de AURI (avatar + audio + burbuja de chat)
+ *     se procesan siempre en segundo plano: cambiarEstadoEmocional() y
+ *     _añadirBurbujaChat() operan sobre el DOM aunque la vista esté oculta.
+ *
+ * Guard: si ya estamos en vistaDestino no hace nada (evita trabajo redundante).
  *
  * @param {'wearable'|'app'} vistaDestino
  */
-function navegarVista(vistaDestino) {
+function alternarVista(vistaDestino) {
+  // Guard: no reanimar si ya estamos en esa vista
+  if (vistaDestino === appState.vistaActiva) return;
+
   const esApp = vistaDestino === 'app';
 
-  // Muestra / oculta secciones usando el atributo [hidden] nativo
+  // ── 1. Visibilidad: [hidden] nativo de HTML5 ───────────────────────────
+  // [hidden] equivale a display:none vía la hoja de estilos del agente.
+  // A diferencia de una clase CSS, es semántico: aria-hidden no es necesario.
   vistaWearable.hidden = esApp;
   vistaApp.hidden      = !esApp;
 
-  // Actualiza el botón flotante
+  // ── 2. Estado interno ──────────────────────────────────────────────────
+  appState.vistaActiva = vistaDestino;
+
+  // ── 3. Botón flotante de navegación ────────────────────────────────────
   btnAbrirApp.dataset.vista = vistaDestino;
   btnAbrirApp.classList.toggle('btn-abrir-app--en-app', esApp);
   btnAbrirApp.setAttribute(
     'aria-label',
     esApp ? 'Ver el colgante AURI' : 'Abrir App Compañera de AURI'
   );
-  btnAbrirApp.querySelector('.btn-abrir-app__icono').textContent = esApp ? '⌚' : '📱';
+  btnAbrirApp.querySelector('.btn-abrir-app__icono').textContent   = esApp ? '⌚' : '📱';
   btnAbrirApp.querySelector('.btn-abrir-app__etiqueta').textContent = esApp ? 'Colgante' : 'App';
 
-  // Si entramos a la app, sincroniza recuerdos y nombre del perfil
+  // ── 4. Sincronización de datos al abrir la app ─────────────────────────
   if (esApp) {
     _sincronizarVistaApp();
   }
 
+  // ── 5. Gestión de foco (WCAG 2.4.3 – Focus Order) ─────────────────────
+  // requestAnimationFrame aplaza el foco un frame, asegurando que el
+  // elemento ya esté visible (no hidden) antes de recibir el foco.
+  // Los lectores de pantalla anuncian el nuevo contexto correctamente.
+  requestAnimationFrame(() => {
+    if (esApp) {
+      // Foco al campo de texto: el usuario puede escribir de inmediato
+      const destino = chatInput ?? vistaApp.querySelector(
+        'button:not([disabled]), input:not([disabled])'
+      );
+      destino?.focus();
+    } else {
+      // Al volver al colgante, el PTT es el control principal
+      pttBtn?.focus();
+    }
+  });
+
   console.log(`[AURI] Vista activa: ${vistaDestino}`);
 }
+
+/**
+ * Alias de compatibilidad hacia atrás.
+ * En código nuevo usa siempre alternarVista().
+ * @param {'wearable'|'app'} vistaDestino
+ */
+const navegarVista = alternarVista;
 
 /** Rellena la vista App con los datos actuales de la memoria. */
 function _sincronizarVistaApp() {
@@ -1421,15 +1807,23 @@ function _escaparHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// Eventos de navegación entre vistas
+// ── Botón flotante: alterna entre wearable y app ──────────────────────────
 btnAbrirApp.addEventListener('click', () => {
-  const vistaActual = btnAbrirApp.dataset.vista;
-  navegarVista(vistaActual === 'wearable' ? 'app' : 'wearable');
+  alternarVista(appState.vistaActiva === 'wearable' ? 'app' : 'wearable');
 });
 
+// ── Botón "← Volver al Colgante" dentro de la app compañera ───────────────
 if (btnVolverWear) {
-  btnVolverWear.addEventListener('click', () => navegarVista('wearable'));
+  btnVolverWear.addEventListener('click', () => alternarVista('wearable'));
 }
+
+// ── Tecla Escape: cierra la app y vuelve al colgante ──────────────────────
+// Patrón modal/panel de accesibilidad (WCAG 2.1.2 – No Keyboard Trap).
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && appState.vistaActiva === 'app') {
+    alternarVista('wearable');
+  }
+});
 
 // Formulario de recuerdos en la App Compañera
 const formRecuerdo = document.getElementById('form-recuerdo');
@@ -1455,16 +1849,17 @@ if (formRecuerdo) {
   });
 }
 
-// Formulario de chat por texto desde la App Compañera
-const formChat  = document.getElementById('form-chat');
-const chatInput = document.getElementById('chat-input');
+// ── Formulario de chat por texto desde la App Compañera ───────────────────
+// chatInput y formChat se declaran en la sección de referencias al DOM (arriba).
+// La burbuja del usuario se añade dentro de procesarEntradaUsuario para que
+// el flujo sea idéntico tanto si el mensaje proviene de texto como de voz.
 if (formChat) {
   formChat.addEventListener('submit', (e) => {
     e.preventDefault();
     const texto = chatInput?.value.trim();
     if (!texto) return;
+    // Limpia el campo antes de la petición async para evitar doble envío
     chatInput.value = '';
-    _añadirBurbujaChat('usuario', texto);
     procesarEntradaUsuario(texto);
   });
 }
@@ -1513,9 +1908,9 @@ function _añadirBurbujaChat(autor, texto) {
   historial.scrollTop = historial.scrollHeight;
 }
 
-// Expone _añadirBurbujaChat para que reproducirAudioAgente pueda llamarla
-// cuando AURI responde (conexión entre el pipeline de voz y el chat)
-appState._añadirBurbujaChat = _añadirBurbujaChat;
+// _añadirBurbujaChat es una declaración de función con hoisting completo:
+// está disponible en todo el scope del módulo sin necesidad de asignarla
+// a appState. reproducirAudioAgente la llama directamente.
 
 
 // ─────────────────────────────────────────────
@@ -1526,8 +1921,10 @@ appState._añadirBurbujaChat = _añadirBurbujaChat;
   // Estado emocional inicial del avatar
   cambiarEstadoEmocional('neutral');
 
-  // Vista inicial: el colgante
-  navegarVista('wearable');
+  // Establece la vista inicial: el colgante.
+  // Como appState.vistaActiva es null, el guard de alternarVista no se activa
+  // y la función ejecuta la inicialización completa (hidden + foco + estado).
+  alternarVista('wearable');
 
   console.log('[AURI] Inicializado. Esperando aceptación del modal.');
 })();
