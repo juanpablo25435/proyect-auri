@@ -23,7 +23,7 @@
 // registra el error y retorna null sin romper la interfaz.
 
 const GEMINI_API_KEY = window.AURI_CONFIG?.apiKey ?? '';
-const GEMINI_MODEL   = 'gemini-1.5-flash';
+const GEMINI_MODEL   = 'gemini-2.5-flash';
 const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /**
@@ -53,6 +53,7 @@ const appContainer   = document.getElementById('app-container');
 const avatarContainer = document.getElementById('avatar-container');
 const muteBtn        = document.getElementById('mute-btn');
 const volumeSlider   = document.getElementById('volume-slider');
+const speechLangSelect = document.getElementById('speech-lang');
 const pttBtn         = document.getElementById('ptt-btn');
 const triggerBtns    = document.querySelectorAll('.respuestas-rapidas__btn');
 // Controles de la App Compañera (también accedidos por _setUIEsperando)
@@ -227,134 +228,125 @@ function cambiarEstadoEmocional(estado) {
 }
 
 
-// ═══════════════════════════════════════════════════════════════════
-// 3. INTERFAZ DE VOZ (Web Speech API)
-// ───────────────────────────────────────────────────────────────────
-// Dos subsistemas independientes con estado compartido a través de
-// appState (isMuted, volume) y la UI del PTT:
-//
-//   A. RECONOCIMIENTO  SpeechRecognition  → mic → texto → Gemini
-//   B. SÍNTESIS        SpeechSynthesis    → texto AURI → altavoz
-//
-// Ambos están conectados al ciclo de vida del botón PTT: presionar
-// inicia el mic; soltar detiene la escucha y entrega la transcripción.
-// ═══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────
+// 3. MOCKS DE INTERFAZ DE VOZ (Fase 2)
+// ─────────────────────────────────────────────
 
+const _SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const _speechRecognitionSoportado = !!_SpeechRecognition;
+const SILENCE_DELAY_MS = 1800;
 
-// ── A. RECONOCIMIENTO DE VOZ ─────────────────────────────────────────
+let recognition = null;
+let _silenceTimer = null;
+let _acumuladoTranscripcion = '';
+let _enviarAlDetener = false;
 
-/** Singleton del reconocedor (se crea una vez para evitar memory leaks). */
-let _reconocedor = null;
-
-/**
- * Acumula el texto de la transcripción final en el evento 'result'.
- * Se limpia justo después de pasarlo a procesarEntradaUsuario en 'end'.
- */
-let _transcripcionFinal = '';
-
-/**
- * Crea y configura el objeto SpeechRecognition con los tres handlers
- * del ciclo de vida: result → end → error.
- *
- * Retorna null si el navegador no soporta la API.
- *
- * @returns {SpeechRecognition|null}
- */
-function _crearReconocedor() {
-  const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-  if (!SR) {
-    console.warn('[Voz] SpeechRecognition no disponible en este navegador.');
-    return null;
+function _limpiarTimerSilencio() {
+  if (_silenceTimer) {
+    clearTimeout(_silenceTimer);
+    _silenceTimer = null;
   }
+}
 
-  const rec = new SR();
-  rec.lang            = 'es-CO';  // Acento colombiano; el motor hace fallback a es-ES
-  rec.continuous      = false;    // Una sola frase por sesión PTT
-  rec.interimResults  = false;    // Solo resultados finales: menos ruido en el pipeline
-  rec.maxAlternatives = 1;
+function _idiomaVozActual() {
+  return speechLangSelect?.value || 'es-CO';
+}
 
-  // ── result: texto listo ────────────────────────────────────────────────
-  // Se dispara antes de 'end'. Concatena todos los resultados finales.
-  rec.addEventListener('result', (e) => {
-    _transcripcionFinal = Array.from(e.results)
-      .filter(r => r.isFinal)
-      .map(r => r[0].transcript)
-      .join(' ')
-      .trim();
-    console.log(`[Voz] Transcripción: "${_transcripcionFinal}"`);
+function _programarCortePorSilencio() {
+  _limpiarTimerSilencio();
+  _silenceTimer = setTimeout(() => {
+    _enviarAlDetener = true;
+    try { recognition?.stop(); } catch (e) { }
+  }, SILENCE_DELAY_MS);
+}
+
+function _inicializarReconocimiento() {
+  if (!_speechRecognitionSoportado || recognition) return;
+
+  recognition = new _SpeechRecognition();
+  recognition.lang = _idiomaVozActual();
+  recognition.interimResults = true;
+  recognition.continuous = true;
+
+  recognition.addEventListener('start', () => {
+    appState.isRecording = true;
+    _acumuladoTranscripcion = '';
+    _enviarAlDetener = false;
+    pttBtn.classList.add('ptt-btn--grabando');
+    pttBtn.setAttribute('aria-label', 'Escuchando... pulsa para detener');
+    const label = pttBtn.querySelector('.ptt-btn__etiqueta');
+    if (label) label.textContent = 'Escuchando...';
+    if (estadoAuri) estadoAuri.textContent = 'Te estoy escuchando...';
   });
 
-  // ── end: flujo completo ────────────────────────────────────────────────
-  // Se dispara SIEMPRE al terminar (tras result, error o stop manual).
-  // Es el único punto donde se resetea la UI del PTT y se envía el texto.
-  rec.addEventListener('end', () => {
-    _resetearEstadoPTT();
-    const texto = _transcripcionFinal;
-    _transcripcionFinal = '';
-    if (texto) procesarEntradaUsuario(texto);
+  recognition.addEventListener('result', (event) => {
+    let transcripcionViva = '';
+
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      const texto = result[0].transcript;
+      if (result.isFinal) {
+        _acumuladoTranscripcion += texto;
+      } else {
+        transcripcionViva += texto;
+      }
+    }
+
+    const total = `${_acumuladoTranscripcion}${transcripcionViva}`.trim();
+    if (estadoAuri && total) {
+      estadoAuri.textContent = total.length > 80 ? total.slice(0, 77) + '...' : total;
+    }
+
+    _programarCortePorSilencio();
   });
 
-  // ── error: feedback empático ───────────────────────────────────────────
-  // 'end' siempre se dispara DESPUÉS de 'error', por eso no reseteamos
-  // la UI aquí; lo hará 'end'. Solo gestionamos el mensaje al usuario.
-  rec.addEventListener('error', (e) => {
-    console.error('[Voz] Error de SpeechRecognition:', e.error, e.message ?? '');
-    _transcripcionFinal = '';   // Descarta cualquier texto parcial
-    _manejarErrorVoz(e.error);
+  recognition.addEventListener('end', () => {
+    _limpiarTimerSilencio();
+    appState.isRecording = false;
+    pttBtn.classList.remove('ptt-btn--grabando');
+    pttBtn.setAttribute('aria-label', 'Pulsa para hablar');
+    const label = pttBtn.querySelector('.ptt-btn__etiqueta');
+    if (label) label.textContent = 'Hablar';
+
+    const textoFinal = _acumuladoTranscripcion.trim();
+    if (_enviarAlDetener && textoFinal && !_peticionEnCurso) {
+      _enviarAlDetener = false;
+      _acumuladoTranscripcion = '';
+      _añadirBurbujaChat('usuario', textoFinal);
+      procesarEntradaUsuario(textoFinal);
+      return;
+    }
+
+    _enviarAlDetener = false;
+    _acumuladoTranscripcion = '';
+    if (estadoAuri) estadoAuri.textContent = 'AURI te escucha';
   });
 
-  return rec;
+  recognition.addEventListener('error', (event) => {
+    _limpiarTimerSilencio();
+    appState.isRecording = false;
+    _enviarAlDetener = false;
+    pttBtn.classList.remove('ptt-btn--grabando');
+    const label = pttBtn.querySelector('.ptt-btn__etiqueta');
+    if (label) label.textContent = 'Hablar';
+    pttBtn.setAttribute('aria-label', 'Pulsa para hablar');
+    if (estadoAuri) estadoAuri.textContent = 'No pude escucharte, intenta de nuevo.';
+    console.error('[AURI] Error de reconocimiento:', event.error);
+  });
+
+  if (speechLangSelect) {
+    speechLangSelect.addEventListener('change', () => {
+      if (recognition && !appState.isRecording) {
+        recognition.lang = _idiomaVozActual();
+      }
+    });
+  }
 }
 
 /**
- * Resetea el estado visual y lógico del botón PTT al estado de reposo.
- * Se llama desde el evento 'end' del reconocedor (nunca directamente
- * desde pointerup) para evitar parpadeos en la UI mientras la API
- * aún procesa el audio acumulado.
- */
-function _resetearEstadoPTT() {
-  appState.isRecording = false;
-  pttBtn.classList.remove('ptt-btn--grabando');
-  pttBtn.setAttribute('aria-label', 'Mantener presionado para hablar');
-}
-
-/**
- * Clasifica los errores de SpeechRecognition y emite feedback empático
- * a través del pipeline de audio ya establecido.
- *
- * Errores silenciosos ('no-speech', 'aborted'): el usuario simplemente
- * no habló o canceló. No se molesta con un mensaje.
- *
- * @param {string} codigo – SpeechRecognitionErrorEvent.error
- */
-function _manejarErrorVoz(codigo) {
-  if (codigo === 'no-speech' || codigo === 'aborted') return;
-
-  const mensajes = {
-    'not-allowed':
-      'No tengo permiso para usar el micrófono. Por favor, habilítalo en la configuración de tu navegador e intenta de nuevo.',
-    'audio-capture':
-      'No encontré un micrófono conectado. Puedes escribirme directamente desde la app compañera.',
-    'network':
-      'Tuve un problema de red al procesar tu voz. Intenta de nuevo en un momento.',
-    'service-not-allowed':
-      'El reconocimiento de voz no está disponible aquí. Puedes escribirme en la app compañera.',
-    'language-not-supported':
-      'El idioma configurado no está soportado en tu dispositivo. Puedes escribirme en la app compañera.',
-  };
-
-  const mensaje = mensajes[codigo]
-    ?? `Tuve un problema con el micrófono (${codigo}). Puedes escribirme en la app compañera.`;
-
-  // Usa reproducirAudioAgente para añadir la burbuja al chat y vocalizar el mensaje
-  reproducirAudioAgente(mensaje);
-}
-
-/**
- * Inicia el reconocimiento de voz (llamado desde activarGrabacion).
- * Si AURI estaba hablando, cancela la síntesis para dar paso inmediato
- * al micrófono del usuario.
- * Si el navegador no soporta la API, resetea la UI y notifica al usuario.
+ * PLACEHOLDER – Fase 2.
+ * Iniciará el reconocimiento de voz con la Web Speech API.
+ * El equipo de Fase 2 debe reemplazar el cuerpo de esta función.
  */
 function iniciarReconocimientoVoz() {
   // Interrumpe la síntesis activa: el usuario quiere hablar ahora
@@ -528,8 +520,25 @@ function reproducirAudioAgente(texto) {
     estadoAuri.textContent = texto.length > 60 ? texto.slice(0, 57) + '…' : texto;
   }
 
-  // Síntesis de voz: respeta mute y volumen
-  _sintetizarVoz(texto);
+  // Si está en mute, se mantiene solo salida visual y chat.
+  if (appState.isMuted || !('speechSynthesis' in window)) return;
+
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(texto);
+    const idioma = _idiomaVozActual();
+    utterance.lang = idioma;
+    utterance.volume = Math.max(0, Math.min(1, appState.volume / 100));
+
+    const voces = window.speechSynthesis.getVoices() || [];
+    const idiomaBase = idioma.split('-')[0];
+    const voz = voces.find(v => v.lang === idioma) || voces.find(v => v.lang?.startsWith(idiomaBase));
+    if (voz) utterance.voice = voz;
+
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn('[AURI] No se pudo reproducir voz:', err.message);
+  }
 }
 
 
@@ -767,7 +776,7 @@ async function procesarEntradaUsuario(texto) {
 
   const cuerpo = {
     // Instrucciones del sistema: identidad, cultura, ética y formato
-    system_instruction: {
+    systemInstruction: {
       parts: [{ text: construirSystemPrompt() }],
     },
     // Historial completo de la sesión (últimos N pares de turnos)
@@ -815,7 +824,7 @@ async function procesarEntradaUsuario(texto) {
     // Parsea y valida el JSON estructurado { respuesta, emocion_avatar }
     let data;
     try {
-      data = JSON.parse(textoRespuesta);
+      data = _parsearJsonGemini(textoRespuesta);
     } catch {
       throw Object.assign(
         new Error(`JSON inválido en respuesta de Gemini: ${textoRespuesta.slice(0, 120)}`),
@@ -835,7 +844,7 @@ async function procesarEntradaUsuario(texto) {
     // Añade la respuesta del modelo al historial para el siguiente turno
     historialConversacion.push({
       role:  'model',
-      parts: [{ text: textoRespuesta }],
+      parts: [{ text: JSON.stringify(data) }],
     });
 
     // Extracción de datos de memoria: ligero, síncrono, no bloqueante.
@@ -869,6 +878,39 @@ async function procesarEntradaUsuario(texto) {
 // ─────────────────────────────────────────────
 // 4.4 UTILIDADES INTERNAS DE LA INTEGRACIÓN
 // ─────────────────────────────────────────────
+
+/**
+ * Intenta parsear JSON incluso cuando Gemini agrega texto extra
+ * antes o después del objeto (ej: "Here is the JSON requested:").
+ *
+ * @param {string} texto
+ * @returns {Object}
+ */
+function _parsearJsonGemini(texto) {
+  // Caso ideal: ya viene JSON puro
+  try {
+    return JSON.parse(texto);
+  } catch {
+    // Continúa con extracción tolerante
+  }
+
+  // Limpia posibles fences markdown
+  const sinFences = String(texto)
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+
+  // Extrae desde la primera llave hasta la última
+  const inicio = sinFences.indexOf('{');
+  const fin = sinFences.lastIndexOf('}');
+  if (inicio === -1 || fin === -1 || fin <= inicio) {
+    throw new Error('No se encontró un objeto JSON válido en la respuesta.');
+  }
+
+  const bloqueJson = sinFences.slice(inicio, fin + 1);
+  return JSON.parse(bloqueJson);
+}
 
 /**
  * Valida que el JSON recibido de Gemini cumpla el contrato del prompt.
@@ -924,10 +966,11 @@ function _manejarErrorAPI(err, tipo = 'red') {
   };
 
   const fallback = mensajes[tipo] ?? mensajes.red;
+  const detalle = err?.message ? ` Detalle: ${String(err.message).slice(0, 140)}` : '';
 
   // Retorna el avatar a neutral y entrega el texto al pipeline de audio
   cambiarEstadoEmocional('neutral');
-  reproducirAudioAgente(fallback);
+  reproducirAudioAgente(fallback + (tipo === 'api' || tipo === 'transitorio' || tipo === 'formato' ? detalle : ''));
 }
 
 /**
@@ -1002,9 +1045,7 @@ triggerBtns.forEach(btn => {
  */
 function activarGrabacion() {
   if (appState.isRecording) return;
-  appState.isRecording = true;
-  pttBtn.classList.add('ptt-btn--grabando');
-  pttBtn.setAttribute('aria-label', 'Grabando… suelta para enviar');
+  pttBtn.setAttribute('aria-label', 'Escuchando... pulsa para detener');
   iniciarReconocimientoVoz();
 }
 
@@ -1022,26 +1063,20 @@ function activarGrabacion() {
  */
 function desactivarGrabacion() {
   if (!appState.isRecording) return;
-  if (_reconocedor) {
-    detenerReconocimientoVoz();
-    // La UI se resetea de forma diferida en el handler del evento 'end'
-  } else {
-    // Sin soporte: no hay eventos asíncronos, reset inmediato
-    _resetearEstadoPTT();
-  }
+  _limpiarTimerSilencio();
+  _enviarAlDetener = false;
+  try { recognition?.stop(); } catch (e) { }
+  console.log('Captura de voz detenida manualmente.');
 }
 
-// Pointer Events API: unifica mouse, touch y stylus en tres eventos.
-// Elimina la necesidad de manejar mousedown/touchstart por separado,
-// garantizando comportamiento idéntico en escritorio, móvil y tablet.
-// setPointerCapture() mantiene el evento activo aunque el dedo salga
-// del botón antes de soltar, evitando que quede en estado "grabando".
-pttBtn.addEventListener('pointerdown', (e) => {
-  pttBtn.setPointerCapture(e.pointerId);
-  activarGrabacion();
+// Botón Hablar: click para iniciar y click para detener.
+pttBtn.addEventListener('click', () => {
+  if (appState.isRecording) {
+    desactivarGrabacion();
+  } else {
+    activarGrabacion();
+  }
 });
-pttBtn.addEventListener('pointerup',   desactivarGrabacion);
-pttBtn.addEventListener('pointerleave', desactivarGrabacion);
 
 
 // ─────────────────────────────────────────────
