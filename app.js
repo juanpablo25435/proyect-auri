@@ -19,12 +19,17 @@
 //      (Cloud Function, servidor Node, etc.) que nunca exponga
 //      la clave al cliente.
 //
-// Si env.js no existe, GEMINI_API_KEY queda vacío y _resolverEndpoint()
-// registra el error y retorna null sin romper la interfaz.
+// Si env.js no existe, las claves quedan vacías y la UI seguirá cargando
+// sin romperse; al enviar, se mostrará un error de configuración claro.
 
-const GEMINI_API_KEY = window.AURI_CONFIG?.apiKey ?? '';
-const GEMINI_MODEL   = 'gemini-2.5-flash';
-const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models';
+const AURI_CONFIG      = window.AURI_CONFIG ?? {};
+const DEFAULT_PROVIDER  = AURI_CONFIG.defaultProvider ?? 'gemini';
+const GEMINI_API_KEY    = AURI_CONFIG.geminiApiKey ?? AURI_CONFIG.apiKey ?? '';
+const GROQ_API_KEY      = AURI_CONFIG.groqApiKey ?? '';
+const GEMINI_MODEL      = 'gemini-2.5-flash';
+const GROQ_MODEL        = 'llama-3.1-8b-instant';
+const GEMINI_BASE       = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GROQ_ENDPOINT     = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**
  * Devuelve el endpoint completo con la clave inyectada.
@@ -32,15 +37,40 @@ const GEMINI_BASE    = 'https://generativelanguage.googleapis.com/v1beta/models'
  *
  * @returns {string|null}
  */
-function _resolverEndpoint() {
+function _resolverProveedor(proveedor = DEFAULT_PROVIDER) {
+  if (proveedor === 'groq') {
+    if (!GROQ_API_KEY) {
+      console.error(
+        '[AURI] API Key de Groq no configurada.',
+        'Completa window.AURI_CONFIG.groqApiKey en env.js'
+      );
+      return null;
+    }
+
+    return {
+      id: 'groq',
+      nombre: 'Groq',
+      model: GROQ_MODEL,
+      endpoint: GROQ_ENDPOINT,
+      apiKey: GROQ_API_KEY,
+    };
+  }
+
   if (!GEMINI_API_KEY) {
     console.error(
-      '[AURI] API Key no configurada.',
-      'Crea env.js con: window.AURI_CONFIG = { apiKey: "..." }'
+      '[AURI] API Key de Gemini no configurada.',
+      'Completa window.AURI_CONFIG.geminiApiKey (o apiKey) en env.js'
     );
     return null;
   }
-  return `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+  return {
+    id: 'gemini',
+    nombre: 'Gemini',
+    model: GEMINI_MODEL,
+    endpoint: `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    apiKey: GEMINI_API_KEY,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -54,6 +84,7 @@ const avatarContainer = document.getElementById('avatar-container');
 const muteBtn        = document.getElementById('mute-btn');
 const volumeSlider   = document.getElementById('volume-slider');
 const speechLangSelect = document.getElementById('speech-lang');
+const providerSelect = document.getElementById('provider-select');
 const pttBtn         = document.getElementById('ptt-btn');
 // Controles de la App Compañera (también accedidos por _setUIEsperando)
 const chatInput      = document.getElementById('chat-input');
@@ -72,6 +103,7 @@ const appState = {
   isRecording:    false,
   // null = ninguna vista inicializada aún; se asigna en init()
   vistaActiva:    null,
+  proveedorActivo: DEFAULT_PROVIDER,
 };
 
 // Valores internos que mapean a clases CSS BEM del avatar
@@ -666,6 +698,67 @@ function construirSystemPrompt() {
   ].join('\n\n');
 }
 
+function _obtenerProveedorSeleccionado() {
+  return providerSelect?.value || appState.proveedorActivo || DEFAULT_PROVIDER;
+}
+
+if (providerSelect) {
+  providerSelect.value = DEFAULT_PROVIDER;
+  appState.proveedorActivo = providerSelect.value;
+
+  providerSelect.addEventListener('change', () => {
+    appState.proveedorActivo = providerSelect.value;
+  });
+}
+
+function _construirMensajesGroq() {
+  const mensajes = [
+    { role: 'system', content: construirSystemPrompt() },
+  ];
+
+  const historial = historialConversacion.slice(-(MAX_TURNOS_HISTORIAL * 2));
+  for (const turno of historial) {
+    mensajes.push({
+      role: turno.role === 'model' ? 'assistant' : 'user',
+      content: turno.parts?.[0]?.text ?? '',
+    });
+  }
+
+  return mensajes;
+}
+
+function _construirCuerpoSolicitud(proveedorId) {
+  if (proveedorId === 'groq') {
+    return {
+      model: GROQ_MODEL,
+      messages: _construirMensajesGroq(),
+      temperature: 0.72,
+      max_tokens: 300,
+    };
+  }
+
+  return {
+    systemInstruction: {
+      parts: [{ text: construirSystemPrompt() }],
+    },
+    contents: historialConversacion.slice(-(MAX_TURNOS_HISTORIAL * 2)),
+    generationConfig: {
+      temperature:      0.72,
+      topP:             0.90,
+      maxOutputTokens:  300,
+      responseMimeType: 'application/json',
+    },
+  };
+}
+
+function _extraerTextoRespuestaProveedor(proveedorId, payload) {
+  if (proveedorId === 'groq') {
+    return payload?.choices?.[0]?.message?.content ?? '';
+  }
+
+  return payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
+
 // ─────────────────────────────────────────────
 // 4.2 HISTORIAL DE CONVERSACIÓN (multi-turno)
 // ─────────────────────────────────────────────
@@ -731,10 +824,10 @@ async function procesarEntradaUsuario(texto) {
     return false;
   }
 
-  // Verifica que la API Key esté disponible antes de bloquear la UI
-  const endpoint = _resolverEndpoint();
-  if (!endpoint) {
-    _manejarErrorAPI(new Error('API Key no configurada.'), 'config');
+  const proveedorId = _obtenerProveedorSeleccionado();
+  const proveedor = _resolverProveedor(proveedorId);
+  if (!proveedor) {
+    _manejarErrorAPI(new Error(`API Key no configurada para ${proveedorId}.`), 'config');
     return false;
   }
 
@@ -753,32 +846,23 @@ async function procesarEntradaUsuario(texto) {
   const turnoUsuario = { role: 'user', parts: [{ text: textoLimpio }] };
   historialConversacion.push(turnoUsuario);
 
-  console.log(`[AURI] Enviando a Gemini (turno ${Math.ceil(historialConversacion.length / 2)}): "${textoLimpio}"`);
+  console.log(`[AURI] Enviando a ${proveedor.nombre} (turno ${Math.ceil(historialConversacion.length / 2)}): "${textoLimpio}"`);
 
   // AbortController para timeout explícito de 30 s
   const controlador = new AbortController();
   const idTimeout    = setTimeout(() => controlador.abort(), TIMEOUT_API_MS);
 
-  const cuerpo = {
-    // Instrucciones del sistema: identidad, cultura, ética y formato
-    systemInstruction: {
-      parts: [{ text: construirSystemPrompt() }],
-    },
-    // Historial completo de la sesión (últimos N pares de turnos)
-    contents: historialConversacion.slice(-(MAX_TURNOS_HISTORIAL * 2)),
-    generationConfig: {
-      temperature:      0.72,  // Variabilidad empática sin perder coherencia
-      topP:             0.90,
-      maxOutputTokens:  300,
-      // Fuerza JSON puro: Gemini no añadirá markdown ni texto extra
-      responseMimeType: 'application/json',
-    },
-  };
+  const cuerpo = _construirCuerpoSolicitud(proveedorId);
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(proveedor.endpoint, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: proveedorId === 'groq'
+        ? {
+            'Authorization': `Bearer ${proveedor.apiKey}`,
+            'Content-Type': 'application/json',
+          }
+        : { 'Content-Type': 'application/json' },
       body:    JSON.stringify(cuerpo),
       signal:  controlador.signal,
     });
@@ -797,11 +881,11 @@ async function procesarEntradaUsuario(texto) {
     const payload = await response.json();
 
     // Extrae el texto del candidato principal de Gemini
-    const textoRespuesta = payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const textoRespuesta = _extraerTextoRespuestaProveedor(proveedorId, payload);
 
     if (!textoRespuesta) {
       throw Object.assign(
-        new Error('Gemini devolvió una respuesta vacía.'),
+        new Error(`${proveedor.nombre} devolvió una respuesta vacía.`),
         { tipo: 'formato' }
       );
     }
@@ -812,7 +896,7 @@ async function procesarEntradaUsuario(texto) {
       data = _parsearJsonGemini(textoRespuesta);
     } catch {
       throw Object.assign(
-        new Error(`JSON inválido en respuesta de Gemini: ${textoRespuesta.slice(0, 120)}`),
+        new Error(`JSON inválido en respuesta de ${proveedor.nombre}: ${textoRespuesta.slice(0, 120)}`),
         { tipo: 'formato' }
       );
     }
@@ -836,7 +920,7 @@ async function procesarEntradaUsuario(texto) {
     // Analiza el turno del usuario para actualizar perfil, vector temático y nombre.
     extraerDatosConversacion(textoLimpio);
 
-    console.log(`[AURI] Respuesta recibida. Emoción: ${data.emocion_avatar} → CSS: ${claseEstado}`);
+    console.log(`[AURI] Respuesta recibida desde ${proveedor.nombre}. Emoción: ${data.emocion_avatar} → CSS: ${claseEstado}`);
     return true;
 
   } catch (err) {
@@ -1935,6 +2019,11 @@ function _añadirBurbujaChat(autor, texto) {
 (function init() {
   // Estado emocional inicial del avatar
   cambiarEstadoEmocional('neutral');
+
+  if (providerSelect) {
+    providerSelect.value = DEFAULT_PROVIDER;
+    appState.proveedorActivo = providerSelect.value;
+  }
 
   // Establece la vista inicial: el colgante.
   // Como appState.vistaActiva es null, el guard de alternarVista no se activa
