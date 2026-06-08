@@ -428,7 +428,7 @@ function iniciarReconocimientoVoz() {
 
   if (!_speechRecognitionSoportado) {
     reproducirAudioAgente(
-      'El reconocimiento de voz no está disponible en este navegador. Puedes usar el chat de texto.'
+      'Tu navegador actual no soporta mi función de voz. Para hablar conmigo, te sugiero usar Chrome o Safari. ¡Pero podemos seguir usando el chat de texto aquí!'
     );
     return;
   }
@@ -1006,29 +1006,22 @@ async function procesarEntradaUsuario(texto) {
  * @returns {Object}
  */
 function _parsearJsonGemini(texto) {
-  // Caso ideal: ya viene JSON puro
-  try {
-    return JSON.parse(texto);
-  } catch {
-    // Continúa con extracción tolerante
-  }
+  const textoOriginal = String(texto ?? '');
 
-  // Limpia posibles fences markdown
-  const sinFences = String(texto)
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/, '')
+  // Limpieza robusta: algunos modelos ignoran responseMimeType y agregan
+  // texto de cortesía o fences markdown alrededor del JSON.
+  const textoLimpio = textoOriginal
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
     .trim();
 
-  // Extrae desde la primera llave hasta la última
-  const inicio = sinFences.indexOf('{');
-  const fin = sinFences.lastIndexOf('}');
-  if (inicio === -1 || fin === -1 || fin <= inicio) {
-    throw new Error('No se encontró un objeto JSON válido en la respuesta.');
+  // Extrae estrictamente desde la primera llave hasta la última llave.
+  const match = textoLimpio.match(/\{[\s\S]*\}/);
+  if (!match) {
+    throw new Error('No se encontró un JSON válido en la respuesta');
   }
 
-  const bloqueJson = sinFences.slice(inicio, fin + 1);
-  return JSON.parse(bloqueJson);
+  return JSON.parse(match[0]);
 }
 
 /**
