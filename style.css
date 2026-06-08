@@ -559,19 +559,151 @@ button:focus-visible {
   background-color: var(--color-trigger-hover);
 }
 
-/* Cuerpo: historial de chat + panel de recuerdos en columnas */
+/*
+  Botón gear (⚙️ / ❌) para mostrar/ocultar el sidebar en móvil.
+  Oculto por defecto en escritorio; visible solo en pantallas < 640px
+  (alineado con el breakpoint donde el grid de 2 columnas se activa).
+*/
+.companion-app__btn-ajustes {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--color-trigger-fondo);
+  border: 1px solid var(--color-trigger-borde);
+  color: var(--color-texto-primario);
+  font-size: 1.15rem;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background-color var(--transicion-base), transform 0.15s ease;
+}
+
+.companion-app__btn-ajustes:hover {
+  background-color: var(--color-trigger-hover);
+}
+
+.companion-app__btn-ajustes:active {
+  transform: scale(0.93);
+}
+
+/* Cuerpo: historial de chat + panel de recuerdos en columnas.
+   position:relative es obligatorio en la regla base (no solo en la MQ móvil)
+   para que el sidebar con position:absolute siempre tenga este elemento
+   como bloque contenedor, independientemente de si la MQ se aplica. */
 .companion-app__cuerpo {
   display: grid;
   /* En móvil: una sola columna (chat ocupa todo el ancho) */
   grid-template-columns: 1fr;
   overflow: hidden;
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
 }
 
 @media (min-width: 640px) {
-  /* En tablet/desktop: chat + panel lado a lado */
+  /* En tablet/desktop: chat + sidebar (recuerdos + ajustes) lado a lado */
   .companion-app__cuerpo {
     grid-template-columns: 1fr 280px;
   }
+}
+
+/*
+  Sidebar: columna de recuerdos y ajustes.
+  Oculto por defecto en móvil (la media query < 640px lo maneja).
+  En escritorio (≥ 640px) es un bloque flex que ocupa la segunda columna del grid.
+  No se usa display:contents porque causa comportamientos inconsistentes
+  en Safari/WebKit al combinarse con display:none y display:block en cascade.
+*/
+@media (min-width: 640px) {
+  .companion-app__sidebar {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+}
+
+/* ─── COMPORTAMIENTO MÓVIL (< 640px) ──────────────────────────────────────
+   Por debajo del breakpoint de 2 columnas:
+   · El sidebar se oculta completamente por defecto (display:none).
+   · Cuando .companion-app--mostrando-ajustes está activo, el sidebar
+     aparece como overlay de pantalla completa sobre el chat.
+   · El botón gear ⚙️ se vuelve visible para controlarlo.
+   Nota: no usamos max-width: 768px para no colisionar con el grid de 640px.
+
+   Por qué display:flex en el overlay (no display:block):
+   · Garantiza que el sidebar genere un bloque formateado propio
+     sin depender de valores heredados de display:contents.
+   · flex-direction:column es necesario para que panel-recuerdos y
+     panel-ajustes se apilen verticalmente dentro del overlay.
+
+   Por qué fade-in y no translateX:
+   · .companion-app__cuerpo tiene overflow:hidden como celda del grid.
+     Un translateX(100%) en la animación inicial colocaría el sidebar
+     fuera de ese rectángulo de clip, haciéndolo invisible durante toda
+     la animación. La solución es un fade-in que nunca sale del clip.
+─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 639px) {
+  /* El botón gear es visible solo en móvil */
+  .companion-app__btn-ajustes {
+    display: flex;
+  }
+
+  /* Sidebar oculto por defecto: el chat ocupa toda la pantalla */
+  .companion-app__sidebar {
+    display: none;
+  }
+
+  /* Overlay activo: el sidebar se superpone sobre el área de chat.
+     · display:flex !important fuerza la caja incluso si algún otro selector
+       (grid, herencia) intenta imponer otro modelo de visualización.
+     · z-index:999 asegura que quede encima de cualquier otro contenido del grid.
+     · inset:0 + width/height:100% son redundantes pero defensivos: garantizan
+       que la caja cubra el cuerpo incluso en motores que no implementen inset. */
+  .companion-app--mostrando-ajustes .companion-app__sidebar {
+    display: flex !important;
+    flex-direction: column;
+    position: absolute;
+    inset: 0;
+    z-index: 999;
+    background-color: var(--color-fondo) !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 300px !important;         /* PREVIENE ALTURA CERO */
+    opacity: 1 !important;                /* MATA FADES ROTOS */
+    visibility: visible !important;
+    overflow-y: auto;
+  }
+
+  /* El wrapper se abre, pero .panel-recuerdos tenía su propio display:none.
+     Estos overrides prueban que los hijos también rendericen en móvil. */
+  .companion-app--mostrando-ajustes .panel-recuerdos {
+    display: flex !important;
+    flex-direction: column;
+    visibility: visible !important;
+    opacity: 1 !important;
+    min-height: 100% !important;
+  }
+
+  .companion-app--mostrando-ajustes .panel-ajustes {
+    display: flex !important;
+    flex-direction: column;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* El chat se oculta mientras el sidebar está superpuesto */
+  .companion-app--mostrando-ajustes .chat-historial {
+    visibility: hidden;
+  }
+}
+
+/* Fade-in sin translateX: evita el clipping de overflow:hidden del cuerpo */
+@keyframes sidebar-entrar {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* Pie: zona de entrada de texto con separación de alto contraste */

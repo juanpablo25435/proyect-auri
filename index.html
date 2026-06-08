@@ -197,6 +197,19 @@
           <p id="companion-nombre-usuario" class="companion-app__nombre-usuario" aria-live="polite">
             <!-- app.js lo rellena con el nombre guardado en memoria -->
           </p>
+
+          <!--
+            Botón gear: visible solo en móvil (< 640px).
+            Alterna el sidebar de recuerdos y ajustes sobre el chat.
+            aria-pressed refleja si el panel está abierto.
+          -->
+          <button
+            id="btn-toggle-ajustes"
+            class="companion-app__btn-ajustes"
+            type="button"
+            aria-label="Mostrar configuraciones"
+            aria-pressed="false"
+          >⚙️</button>
         </header><!-- /companion-app__cabecera -->
 
 
@@ -230,11 +243,12 @@
 
 
           <!--
-            Panel de recuerdos y configuración
-            ────────────────────────────────────
-            Permite al usuario ver los recuerdos guardados,
-            añadir nuevos y gestionar su privacidad.
+            Sidebar: panel de recuerdos + panel de ajustes.
+            En móvil (< 640px) está oculto por defecto y se muestra
+            en overlay cuando .companion-app--mostrando-ajustes está activo.
+            En escritorio (≥ 640px) es siempre visible como segunda columna.
           -->
+          <div class="companion-app__sidebar">
           <aside
             class="panel-recuerdos"
             aria-label="Panel de recuerdos y configuración"
@@ -401,6 +415,7 @@
             </section><!-- /panel-ajustes -->
 
           </aside><!-- /panel-recuerdos -->
+          </div><!-- /companion-app__sidebar -->
 
         </div><!-- /companion-app__cuerpo -->
 

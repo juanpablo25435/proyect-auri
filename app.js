@@ -279,6 +279,25 @@ function _limpiarTimerSilencio() {
   }
 }
 
+// ── Desbloqueo de AudioContext para iOS ───────────────────────────────────
+// iOS (Safari/WebKit) bloquea window.speechSynthesis.speak() a menos que
+// la primera llamada ocurra dentro de un gestor de evento de usuario
+// explícito (pointerdown, touchstart, click…). Las respuestas de AURI llegan
+// de forma asíncrona (tras la llamada a la API), por lo que no cuentan como
+// "gesto del usuario". La solución es lanzar un utterance vacío y silente
+// durante el primer pointerdown del PTT, desbloqueando el AudioContext para
+// todas las síntesis posteriores en la misma sesión.
+let _audioDesbloqueadoIOS = false;
+
+function _desbloquearAudioIOS() {
+  if (_audioDesbloqueadoIOS || !window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance('');
+  u.volume = 0;
+  window.speechSynthesis.speak(u);
+  _audioDesbloqueadoIOS = true;
+  console.log('[Voz] AudioContext desbloqueado para iOS.');
+}
+
 function _idiomaVozActual() {
   return appState.idioma ?? 'es-CO';
 }
@@ -366,8 +385,21 @@ function _inicializarReconocimiento() {
     const label = pttBtn.querySelector('.ptt-btn__etiqueta');
     if (label) label.textContent = 'Hablar';
     pttBtn.setAttribute('aria-label', 'Pulsa para hablar');
-    if (estadoAuri) estadoAuri.textContent = 'No pude escucharte, intenta de nuevo.';
-    console.error('[AURI] Error de reconocimiento:', event.error);
+
+    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      // Micrófono denegado: mensaje visible en el historial del chat
+      _añadirBurbujaChat('auri',
+        'Por favor, concédeme permisos de micrófono en tu navegador para poder escucharte.'
+      );
+      if (estadoAuri) estadoAuri.textContent = 'Permiso de micrófono denegado.';
+    } else if (event.error === 'no-speech') {
+      // Silencio prolongado sin audio: no requiere mensaje al usuario
+      if (estadoAuri) estadoAuri.textContent = 'No detecté audio. Intenta de nuevo.';
+    } else if (event.error !== 'aborted') {
+      // 'aborted' ocurre al detener manualmente (normal); cualquier otro es inesperado
+      if (estadoAuri) estadoAuri.textContent = 'No pude escucharte, intenta de nuevo.';
+      console.error('[AURI] Error de reconocimiento:', event.error);
+    }
   });
 
   if (speechLangSelect) {
@@ -410,8 +442,21 @@ function iniciarReconocimientoVoz() {
     recognition.start();
     console.log('[Voz] Reconocimiento iniciado.');
   } catch (err) {
-    // InvalidStateError: press doble muy rápido mientras el motor ya arranca
-    console.warn('[Voz] start() ignorado – reconocedor ya activo:', err.message);
+    if (err.name === 'NotAllowedError') {
+      // Algunos navegadores lanzan NotAllowedError de forma síncrona cuando
+      // el permiso ya fue denegado permanentemente por el usuario.
+      _añadirBurbujaChat('auri',
+        'Por favor, concédeme permisos de micrófono en tu navegador para poder escucharte.'
+      );
+      if (estadoAuri) estadoAuri.textContent = 'Permiso de micrófono denegado.';
+      pttBtn.classList.remove('ptt-btn--grabando');
+      const label = pttBtn.querySelector('.ptt-btn__etiqueta');
+      if (label) label.textContent = 'Hablar';
+      pttBtn.setAttribute('aria-label', 'Pulsa para hablar');
+    } else {
+      // InvalidStateError: doble press muy rápido mientras el motor ya arranca
+      console.warn('[Voz] start() ignorado – reconocedor ya activo:', err.message);
+    }
   }
 }
 
@@ -1130,6 +1175,10 @@ function desactivarGrabacion() {
 pttBtn.addEventListener('pointerdown', (e) => {
   e.preventDefault(); // evita el click sintético en dispositivos táctiles
   pttBtn.setPointerCapture(e.pointerId);
+  // iOS bloquea speechSynthesis.speak() fuera de gestos de usuario.
+  // Este llamado (dentro del pointerdown) desbloquea el AudioContext de WebKit
+  // la primera vez, permitiendo síntesis posterior de forma asíncrona.
+  _desbloquearAudioIOS();
   activarGrabacion();
 });
 
@@ -1769,9 +1818,10 @@ function _escaparXml(str) {
 // ─────────────────────────────────────────────
 
 const vistaWearable  = document.getElementById('vista-wearable');
-const vistaApp       = document.getElementById('vista-app');
-const btnAbrirApp    = document.getElementById('btn-abrir-app');
-const btnVolverWear  = document.getElementById('btn-volver-wearable');
+const vistaApp          = document.getElementById('vista-app');
+const btnAbrirApp       = document.getElementById('btn-abrir-app');
+const btnVolverWear     = document.getElementById('btn-volver-wearable');
+const btnToggleAjustes  = document.getElementById('btn-toggle-ajustes');
 const estadoAuri     = document.getElementById('estado-auri');
 const companionNombre = document.getElementById('companion-nombre-usuario');
 
@@ -1813,7 +1863,17 @@ function alternarVista(vistaDestino) {
   // ── 2. Estado interno ──────────────────────────────────────────────────
   appState.vistaActiva = vistaDestino;
 
-  // ── 3. Botón flotante de navegación ────────────────────────────────────
+  // ── 3. Cierra el sidebar móvil al salir de la vista app ───────────────
+  if (!esApp && vistaApp.classList.contains('companion-app--mostrando-ajustes')) {
+    vistaApp.classList.remove('companion-app--mostrando-ajustes');
+    if (btnToggleAjustes) {
+      btnToggleAjustes.textContent = '⚙️';
+      btnToggleAjustes.setAttribute('aria-label', 'Mostrar configuraciones');
+      btnToggleAjustes.setAttribute('aria-pressed', 'false');
+    }
+  }
+
+  // ── 4. Botón flotante de navegación ────────────────────────────────────
   btnAbrirApp.dataset.vista = vistaDestino;
   btnAbrirApp.classList.toggle('btn-abrir-app--en-app', esApp);
   btnAbrirApp.setAttribute(
@@ -1823,12 +1883,12 @@ function alternarVista(vistaDestino) {
   btnAbrirApp.querySelector('.btn-abrir-app__icono').textContent   = esApp ? '⌚' : '📱';
   btnAbrirApp.querySelector('.btn-abrir-app__etiqueta').textContent = esApp ? 'Colgante' : 'App';
 
-  // ── 4. Sincronización de datos al abrir la app ─────────────────────────
+  // ── 5. Sincronización de datos al abrir la app ─────────────────────────
   if (esApp) {
     _sincronizarVistaApp();
   }
 
-  // ── 5. Gestión de foco (WCAG 2.4.3 – Focus Order) ─────────────────────
+  // ── 6. Gestión de foco (WCAG 2.4.3 – Focus Order) ─────────────────────
   // requestAnimationFrame aplaza el foco un frame, asegurando que el
   // elemento ya esté visible (no hidden) antes de recibir el foco.
   // Los lectores de pantalla anuncian el nuevo contexto correctamente.
@@ -1919,6 +1979,18 @@ btnAbrirApp.addEventListener('click', () => {
 // ── Botón "← Volver al Colgante" dentro de la app compañera ───────────────
 if (btnVolverWear) {
   btnVolverWear.addEventListener('click', () => alternarVista('wearable'));
+}
+
+// ── Botón ⚙️ / ❌: alterna el sidebar de ajustes en móvil ─────────────────
+if (btnToggleAjustes) {
+  btnToggleAjustes.addEventListener('click', () => {
+    const vistaAppRaiz = document.getElementById('vista-app');
+    const abierto = vistaAppRaiz.classList.toggle('companion-app--mostrando-ajustes');
+    console.log('[AURI] Sidebar toggled:', abierto, '| Clases en #vista-app:', vistaAppRaiz.className);
+    btnToggleAjustes.textContent = abierto ? '❌' : '⚙️';
+    btnToggleAjustes.setAttribute('aria-label', abierto ? 'Cerrar configuraciones' : 'Mostrar configuraciones');
+    btnToggleAjustes.setAttribute('aria-pressed', String(abierto));
+  });
 }
 
 // ── Tecla Escape: cierra la app y vuelve al colgante ──────────────────────

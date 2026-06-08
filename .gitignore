@@ -32,3 +32,8 @@ yarn-error.log*
 
 # Módulos (En caso de añadir herramientas de build en el futuro)
 node_modules/
+# Added by code-review-graph
+.code-review-graph/
+.cursor/
+AGENTS.md
+.cursorrules
