@@ -292,16 +292,16 @@ button:focus-visible {
    VISTA 1 – WEARABLE / COLGANTE (apariencia hardware)
    -----------------------------------------------
    Bloque BEM: .wearable
-   Elementos:  .wearable__cabecera
-               .wearable__dispositivo  ← nuevo: device físico
+   Elementos:  .wearable__dispositivo  ← device físico oval
                .wearable__cuerpo
                .wearable__colgante
                .wearable__estado-texto
                .wearable__pie
 
+   La cabecera con controles de audio fue eliminada:
+   ahora viven en .panel-ajustes de la App Compañera.
    El fondo oscuro del <body> actúa como la "mesa"
    o ambiente sobre el que reposa el colgante real.
-   La sección .wearable solo centra el contenido.
 ============================================== */
 
 /* Pantalla completa oscura que enmarca el dispositivo */
@@ -315,31 +315,6 @@ button:focus-visible {
   width: 100%;
   padding: var(--espacio-md);
   transition: opacity var(--transicion-base), transform var(--transicion-base);
-}
-
-/* Controles de audio sobre el dispositivo: compactos y centrados */
-.wearable__cabecera {
-  width: 100%;
-  max-width: 300px;
-  padding: 0;
-  display: flex;
-  justify-content: center;
-}
-
-/* Controles de volumen/mute más compactos en contexto wearable */
-.wearable__cabecera .controles-audio {
-  gap: var(--espacio-sm);
-  justify-content: center;
-}
-
-.wearable__cabecera .control-btn {
-  padding: 7px 12px;
-  min-height: 36px;
-  font-size: 13px;
-}
-
-.wearable__cabecera .control-volumen__slider {
-  width: 80px;
 }
 
 /*
@@ -998,7 +973,7 @@ button:focus-visible {
 
 
 /* =============================================
-   CABECERA – Controles de audio
+   CONTROLES DE AUDIO (panel-ajustes de la App Compañera)
    -----------------------------------------------
    Bloque BEM: .controles-audio
    Bloque BEM: .control-btn
@@ -1106,6 +1081,106 @@ button:focus-visible {
   border: none;
   border-radius: 50%;
   background: var(--color-acento);
+}
+
+
+/* =============================================
+   PANEL DE AJUSTES – App Compañera
+   -----------------------------------------------
+   Bloque BEM: .panel-ajustes
+   Elementos:  .panel-ajustes__titulo
+               .panel-ajustes__subtitulo
+               .panel-ajustes__grupo
+               .panel-ajustes__fila
+               .panel-ajustes__label
+               .panel-ajustes__select
+============================================== */
+
+/* Sección semántica de ajustes dentro del panel lateral */
+.panel-ajustes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-md);
+  padding-top: var(--espacio-xs);
+}
+
+/* Título principal del panel */
+.panel-ajustes__titulo {
+  font-size: var(--fuente-base);
+  font-weight: 600;
+  color: var(--color-texto-primario);
+  margin: 0;
+}
+
+/* Encabezado de cada grupo de controles */
+.panel-ajustes__subtitulo {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-texto-secundario);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 var(--espacio-xs);
+}
+
+/* Grupo lógico de controles relacionados */
+.panel-ajustes__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-sm);
+}
+
+/* Fila label + control: se estira al ancho disponible */
+.panel-ajustes__fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacio-sm);
+}
+
+/* Etiqueta accesible del control */
+.panel-ajustes__label {
+  font-size: var(--fuente-pequena);
+  color: var(--color-texto-secundario);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/*
+  Select accesible para idioma y proveedor.
+  Usa los tokens del sistema y una flecha SVG personalizada
+  para mantener la estética de la companion app.
+*/
+.panel-ajustes__select {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  max-width: 160px;
+  padding: 7px 28px 7px 10px;
+  background-color: var(--color-trigger-fondo);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234A90A4' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  border: 1px solid var(--color-trigger-borde);
+  border-radius: var(--radio-pastilla);
+  color: var(--color-texto-primario);
+  font-size: var(--fuente-pequena);
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color     var(--transicion-base),
+    background-color var(--transicion-base);
+}
+
+.panel-ajustes__select:hover,
+.panel-ajustes__select:focus-visible {
+  border-color: var(--color-acento);
+  background-color: var(--color-trigger-hover);
+}
+
+.panel-ajustes__select option {
+  background-color: var(--color-fondo);
+  color: var(--color-texto-primario);
 }
 
 

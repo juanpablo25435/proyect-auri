@@ -23,53 +23,50 @@
 // sin romperse; al enviar, se mostrará un error de configuración claro.
 
 const AURI_CONFIG      = window.AURI_CONFIG ?? {};
-const DEFAULT_PROVIDER  = AURI_CONFIG.defaultProvider ?? 'gemini';
-const GEMINI_API_KEY    = AURI_CONFIG.geminiApiKey ?? AURI_CONFIG.apiKey ?? '';
-const GROQ_API_KEY      = AURI_CONFIG.groqApiKey ?? '';
+// Prioridad: proveedorActivo (env.js) > defaultProvider (legado) > 'gemini'
+const DEFAULT_PROVIDER  = AURI_CONFIG.proveedorActivo ?? AURI_CONFIG.defaultProvider ?? 'gemini';
 const GEMINI_MODEL      = 'gemini-2.5-flash';
 const GROQ_MODEL        = 'llama-3.1-8b-instant';
 const GEMINI_BASE       = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GROQ_ENDPOINT     = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**
- * Devuelve el endpoint completo con la clave inyectada.
- * Retorna null (y registra el error) si la clave no está configurada.
+ * Resuelve el proveedor de IA activo y devuelve su configuración completa.
+ * Las claves se leen en tiempo de ejecución desde window.AURI_CONFIG para
+ * soportar actualizaciones dinámicas sin recargar la página.
  *
- * @returns {string|null}
+ * @param {string} [proveedor] - 'gemini' | 'groq'. Por defecto usa DEFAULT_PROVIDER.
+ * @returns {{ id, nombre, model, endpoint, apiKey } | null}
  */
 function _resolverProveedor(proveedor = DEFAULT_PROVIDER) {
+  const cfg = window.AURI_CONFIG ?? {};
+
   if (proveedor === 'groq') {
-    if (!GROQ_API_KEY) {
+    const key = cfg.groqApiKey ?? '';
+    if (!key) {
       console.error(
         '[AURI] API Key de Groq no configurada.',
-        'Completa window.AURI_CONFIG.groqApiKey en env.js'
+        'Añade window.AURI_CONFIG.groqApiKey en env.js'
       );
       return null;
     }
-
-    return {
-      id: 'groq',
-      nombre: 'Groq',
-      model: GROQ_MODEL,
-      endpoint: GROQ_ENDPOINT,
-      apiKey: GROQ_API_KEY,
-    };
+    return { id: 'groq', nombre: 'Groq', model: GROQ_MODEL, endpoint: GROQ_ENDPOINT, apiKey: key };
   }
 
-  if (!GEMINI_API_KEY) {
+  const key = cfg.geminiApiKey ?? cfg.apiKey ?? '';
+  if (!key) {
     console.error(
       '[AURI] API Key de Gemini no configurada.',
-      'Completa window.AURI_CONFIG.geminiApiKey (o apiKey) en env.js'
+      'Añade window.AURI_CONFIG.geminiApiKey en env.js'
     );
     return null;
   }
-
   return {
-    id: 'gemini',
-    nombre: 'Gemini',
-    model: GEMINI_MODEL,
-    endpoint: `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    apiKey: GEMINI_API_KEY,
+    id:       'gemini',
+    nombre:   'Gemini',
+    model:    GEMINI_MODEL,
+    endpoint: `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${key}`,
+    apiKey:   key,
   };
 }
 
@@ -81,10 +78,11 @@ const modal          = document.getElementById('welcome-modal');
 const acceptBtn      = document.getElementById('accept-btn');
 const appContainer   = document.getElementById('app-container');
 const avatarContainer = document.getElementById('avatar-container');
+// Controles de audio y ajustes (ahora viven en .panel-ajustes de #vista-app)
 const muteBtn        = document.getElementById('mute-btn');
 const volumeSlider   = document.getElementById('volume-slider');
-const speechLangSelect = document.getElementById('speech-lang');
-const providerSelect = document.getElementById('provider-select');
+const speechLangSelect = document.getElementById('selector-idioma');
+const providerSelect   = document.getElementById('selector-proveedor');
 const pttBtn         = document.getElementById('ptt-btn');
 // Controles de la App Compañera (también accedidos por _setUIEsperando)
 const chatInput      = document.getElementById('chat-input');
@@ -97,13 +95,15 @@ const formChat       = document.getElementById('form-chat');
 // ─────────────────────────────────────────────
 
 const appState = {
-  isMuted:        false,
-  volume:         80,
-  emotionalState: 'neutral',
-  isRecording:    false,
+  isMuted:         false,
+  volume:          80,
+  emotionalState:  'neutral',
+  isRecording:     false,
   // null = ninguna vista inicializada aún; se asigna en init()
-  vistaActiva:    null,
+  vistaActiva:     null,
   proveedorActivo: DEFAULT_PROVIDER,
+  // Idioma de reconocimiento y síntesis de voz (BCP-47)
+  idioma:          AURI_CONFIG.defaultLang ?? 'es-CO',
 };
 
 // Valores internos que mapean a clases CSS BEM del avatar
@@ -280,7 +280,7 @@ function _limpiarTimerSilencio() {
 }
 
 function _idiomaVozActual() {
-  return speechLangSelect?.value || 'es-CO';
+  return appState.idioma ?? 'es-CO';
 }
 
 function _programarCortePorSilencio() {
@@ -372,9 +372,13 @@ function _inicializarReconocimiento() {
 
   if (speechLangSelect) {
     speechLangSelect.addEventListener('change', () => {
+      // Actualiza el estado centralizado: _sintetizarVoz y _seleccionarVoz lo leerán
+      appState.idioma = speechLangSelect.value;
+      // Propaga el idioma al reconocedor si no está grabando
       if (recognition && !appState.isRecording) {
-        recognition.lang = _idiomaVozActual();
+        recognition.lang = appState.idioma;
       }
+      console.log(`[AURI] Idioma de voz cambiado a: ${appState.idioma}`);
     });
   }
 }
@@ -453,37 +457,35 @@ if (window.speechSynthesis) {
 }
 
 /**
- * Selecciona la mejor voz española disponible con preferencia femenina.
+ * Selecciona la mejor voz disponible en función de appState.idioma,
+ * con preferencia femenina dentro del mismo grupo de idioma.
  *
  * Orden de prioridad:
- *  1. Voz con lang === 'es-CO' (Colombia)
- *  2. Voz española cuyo nombre contiene indicadores femeninos comunes
- *     en los motores de Google, Apple y Microsoft TTS
- *  3. Cualquier voz es-ES
- *  4. Cualquier voz es-*
+ *  1. Voz exacta para el idioma seleccionado (ej. 'es-CO')
+ *  2. Voz femenina en la familia del idioma (ej. cualquier 'es-*')
+ *  3. Cualquier voz en la familia del idioma
  *
  * @returns {SpeechSynthesisVoice|null}
  */
 function _seleccionarVoz() {
   if (!_vocesDisponibles.length) return null;
 
-  // 1. Colombia
-  const esCO = _vocesDisponibles.find(v => v.lang === 'es-CO');
-  if (esCO) return esCO;
+  const idioma = appState.idioma ?? 'es-CO';
+  const base   = idioma.split('-')[0]; // 'es', 'en', etc.
 
-  // 2. Voz femenina española (nombres típicos de motores TTS)
+  // 1. Coincidencia exacta con el idioma seleccionado
+  const exacta = _vocesDisponibles.find(v => v.lang === idioma);
+  if (exacta) return exacta;
+
+  // 2. Voz femenina en la familia del idioma (nombres típicos de motores TTS)
   const RX_FEMENINO = /sabina|lucia|ines|conchita|elena|paloma|female|mujer/i;
-  const esESFem = _vocesDisponibles.find(
-    v => v.lang.startsWith('es') && RX_FEMENINO.test(v.name)
+  const femenina = _vocesDisponibles.find(
+    v => v.lang.startsWith(base) && RX_FEMENINO.test(v.name)
   );
-  if (esESFem) return esESFem;
+  if (femenina) return femenina;
 
-  // 3. Cualquier voz es-ES
-  const esES = _vocesDisponibles.find(v => v.lang.startsWith('es-ES'));
-  if (esES) return esES;
-
-  // 4. Cualquier voz española
-  return _vocesDisponibles.find(v => v.lang.startsWith('es')) ?? null;
+  // 3. Cualquier voz en la familia del idioma
+  return _vocesDisponibles.find(v => v.lang.startsWith(base)) ?? null;
 }
 
 /**
@@ -519,8 +521,8 @@ function _sintetizarVoz(texto) {
     utterance.voice = voz;
     utterance.lang  = voz.lang;
   } else {
-    // Fallback: el motor del navegador elige la voz según el idioma declarado
-    utterance.lang = 'es-CO';
+    // Fallback: el motor del navegador elige la voz según el idioma seleccionado
+    utterance.lang = appState.idioma ?? 'es-CO';
   }
 
   utterance.addEventListener('error', (e) => {
@@ -699,15 +701,18 @@ function construirSystemPrompt() {
 }
 
 function _obtenerProveedorSeleccionado() {
-  return providerSelect?.value || appState.proveedorActivo || DEFAULT_PROVIDER;
+  return (
+    providerSelect?.value ||
+    appState.proveedorActivo ||
+    window.AURI_CONFIG?.proveedorActivo ||
+    DEFAULT_PROVIDER
+  );
 }
 
 if (providerSelect) {
-  providerSelect.value = DEFAULT_PROVIDER;
-  appState.proveedorActivo = providerSelect.value;
-
   providerSelect.addEventListener('change', () => {
     appState.proveedorActivo = providerSelect.value;
+    console.log(`[AURI] Proveedor de IA cambiado a: ${appState.proveedorActivo}`);
   });
 }
 
@@ -2020,9 +2025,14 @@ function _añadirBurbujaChat(autor, texto) {
   // Estado emocional inicial del avatar
   cambiarEstadoEmocional('neutral');
 
+  // Sincroniza los selectores con el estado inicial de la app.
+  // Los elementos viven en #vista-app (hidden), pero son accesibles desde el DOM.
   if (providerSelect) {
-    providerSelect.value = DEFAULT_PROVIDER;
+    providerSelect.value     = appState.proveedorActivo;
     appState.proveedorActivo = providerSelect.value;
+  }
+  if (speechLangSelect) {
+    speechLangSelect.value = appState.idioma;
   }
 
   // Establece la vista inicial: el colgante.

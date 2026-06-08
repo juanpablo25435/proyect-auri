@@ -67,10 +67,10 @@
         VISTA 1 – COLGANTE / WEARABLE
         ────────────────────────────────────────────
         Simula el dispositivo físico en forma de
-        colgante. Muestra el avatar del sol animado
-        y el botón PTT como único control de voz.
-        Los controles de audio están en la cabecera
-        para no saturar la interfaz del wearable.
+        colgante. Solo contiene el avatar del sol
+        animado y el botón PTT.
+        Los ajustes (audio, voz, proveedor) viven
+        en la App Compañera (#panel-ajustes).
         ════════════════════════════════════════════
       -->
       <section
@@ -78,70 +78,6 @@
         class="wearable"
         aria-label="Colgante AURI"
       >
-
-        <!--
-          Cabecera del wearable – controles de audio.
-          role="banner" explícito porque <header> está
-          anidado en <section>, no directamente en <body>.
-        -->
-        <header class="wearable__cabecera" role="banner">
-          <div class="controles-audio">
-
-            <!-- Botón mute / unmute -->
-            <button
-              id="mute-btn"
-              class="control-btn control-btn--mute"
-              type="button"
-              aria-label="Silenciar sonido"
-              aria-pressed="false"
-            >
-              <span class="control-btn__icono" aria-hidden="true">🔊</span>
-              <span class="control-btn__etiqueta">Silenciar</span>
-            </button>
-
-            <!-- Slider de volumen -->
-            <div class="control-volumen">
-              <label for="volume-slider" class="control-volumen__etiqueta">
-                Volumen
-              </label>
-              <input
-                id="volume-slider"
-                class="control-volumen__slider"
-                type="range"
-                min="0"
-                max="100"
-                value="80"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                aria-valuenow="80"
-              />
-            </div>
-
-            <div class="control-volumen">
-              <label for="speech-lang" class="control-volumen__etiqueta">
-                Idioma
-              </label>
-              <select id="speech-lang" class="control-volumen__slider" aria-label="Idioma de voz de AURI">
-                <option value="es-CO" selected>Español (Colombia)</option>
-                <option value="es-ES">Español (España)</option>
-                <option value="es-MX">Español (México)</option>
-                <option value="en-US">English (US)</option>
-              </select>
-            </div>
-
-            <div class="control-volumen">
-              <label for="provider-select" class="control-volumen__etiqueta">
-                Proveedor
-              </label>
-              <select id="provider-select" class="control-volumen__slider" aria-label="Proveedor de IA">
-                <option value="gemini" selected>Gemini</option>
-                <option value="groq">Groq</option>
-              </select>
-            </div>
-
-          </div>
-        </header><!-- /wearable__cabecera -->
-
 
         <!--
           Dispositivo físico del colgante: envuelve la pantalla
@@ -381,6 +317,88 @@
                 <span aria-hidden="true">🗑</span> Borrar toda mi memoria
               </button>
             </div>
+
+            <!-- Separador visual -->
+            <hr class="panel-recuerdos__separador" />
+
+            <!--
+              Panel de ajustes: audio, voz y proveedor de IA.
+              Los controles se movieron aquí desde el wearable
+              para mantener esa vista minimalista.
+            -->
+            <section class="panel-ajustes" aria-label="Ajustes de AURI">
+              <h4 class="panel-ajustes__titulo">Ajustes</h4>
+
+              <!-- Grupo: Audio -->
+              <div class="panel-ajustes__grupo" role="group" aria-label="Controles de audio">
+                <p class="panel-ajustes__subtitulo">Audio</p>
+
+                <!-- Mute / Unmute -->
+                <button
+                  id="mute-btn"
+                  class="control-btn control-btn--mute"
+                  type="button"
+                  aria-label="Silenciar sonido"
+                  aria-pressed="false"
+                >
+                  <span class="control-btn__icono" aria-hidden="true">🔊</span>
+                  <span class="control-btn__etiqueta">Silenciar</span>
+                </button>
+
+                <!-- Slider de volumen -->
+                <div class="panel-ajustes__fila">
+                  <label for="volume-slider" class="panel-ajustes__label">Volumen</label>
+                  <input
+                    id="volume-slider"
+                    class="control-volumen__slider"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="80"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="80"
+                  />
+                </div>
+              </div><!-- /grupo audio -->
+
+              <!-- Grupo: Voz -->
+              <div class="panel-ajustes__grupo" role="group" aria-label="Configuración de voz">
+                <p class="panel-ajustes__subtitulo">Voz</p>
+
+                <div class="panel-ajustes__fila">
+                  <label for="selector-idioma" class="panel-ajustes__label">Idioma</label>
+                  <select
+                    id="selector-idioma"
+                    class="panel-ajustes__select"
+                    aria-label="Idioma de voz de AURI"
+                  >
+                    <option value="es-CO" selected>Español (Colombia)</option>
+                    <option value="es-ES">Español (España)</option>
+                    <option value="es-MX">Español (México)</option>
+                    <option value="en-US">English (US)</option>
+                  </select>
+                </div>
+              </div><!-- /grupo voz -->
+
+              <!-- Grupo: Proveedor de IA -->
+              <div class="panel-ajustes__grupo" role="group" aria-label="Proveedor de inteligencia artificial">
+                <p class="panel-ajustes__subtitulo">Proveedor de IA</p>
+
+                <div class="panel-ajustes__fila">
+                  <label for="selector-proveedor" class="panel-ajustes__label">Motor</label>
+                  <select
+                    id="selector-proveedor"
+                    class="panel-ajustes__select"
+                    aria-label="Proveedor de IA para AURI"
+                  >
+                    <option value="gemini" selected>Gemini</option>
+                    <option value="groq">Groq (Llama 3)</option>
+                  </select>
+                </div>
+              </div><!-- /grupo proveedor -->
+
+            </section><!-- /panel-ajustes -->
 
           </aside><!-- /panel-recuerdos -->
 
