@@ -315,8 +315,10 @@ function _inicializarReconocimiento() {
 
   recognition = new _SpeechRecognition();
   recognition.lang = _idiomaVozActual();
-  recognition.interimResults = true;
-  recognition.continuous = true;
+  // PTT: solo necesitamos la frase final. En Android, los resultados interinos
+  // pueden llegar acumulados ("HolaHola comoHola...") y generar eco/cascada.
+  recognition.interimResults = false;
+  recognition.continuous = false;
 
   recognition.addEventListener('start', () => {
     appState.isRecording = true;
@@ -330,21 +332,16 @@ function _inicializarReconocimiento() {
   });
 
   recognition.addEventListener('result', (event) => {
-    let transcripcionViva = '';
+    // Como interimResults es false, el último resultado siempre corresponde
+    // a una frase final limpia de este bloque de reconocimiento.
+    const ultimoResultado = event.results[event.results.length - 1];
+    const textoLimpio = ultimoResultado?.[0]?.transcript?.trim() ?? '';
+    _acumuladoTranscripcion = textoLimpio;
 
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const result = event.results[i];
-      const texto = result[0].transcript;
-      if (result.isFinal) {
-        _acumuladoTranscripcion += texto;
-      } else {
-        transcripcionViva += texto;
-      }
-    }
-
-    const total = `${_acumuladoTranscripcion}${transcripcionViva}`.trim();
-    if (estadoAuri && total) {
-      estadoAuri.textContent = total.length > 80 ? total.slice(0, 77) + '...' : total;
+    if (estadoAuri && textoLimpio) {
+      estadoAuri.textContent = textoLimpio.length > 80
+        ? textoLimpio.slice(0, 77) + '...'
+        : textoLimpio;
     }
 
     _programarCortePorSilencio();
@@ -896,6 +893,11 @@ async function procesarEntradaUsuario(texto) {
   const turnoUsuario = { role: 'user', parts: [{ text: textoLimpio }] };
   historialConversacion.push(turnoUsuario);
 
+  // Persistencia inmediata: en móvil la pestaña puede recargarse/suspenderse
+  // durante el fetch. La memoria del usuario debe guardarse en el mismo flujo
+  // del envío, sin esperar a que responda la API ni a eventos de cierre.
+  extraerDatosConversacion(textoLimpio);
+
   console.log(`[AURI] Enviando a ${proveedor.nombre} (turno ${Math.ceil(historialConversacion.length / 2)}): "${textoLimpio}"`);
 
   // AbortController para timeout explícito de 30 s
@@ -965,10 +967,6 @@ async function procesarEntradaUsuario(texto) {
       role:  'model',
       parts: [{ text: JSON.stringify(data) }],
     });
-
-    // Extracción de datos de memoria: ligero, síncrono, no bloqueante.
-    // Analiza el turno del usuario para actualizar perfil, vector temático y nombre.
-    extraerDatosConversacion(textoLimpio);
 
     console.log(`[AURI] Respuesta recibida desde ${proveedor.nombre}. Emoción: ${data.emocion_avatar} → CSS: ${claseEstado}`);
     return true;
@@ -1606,6 +1604,22 @@ function extraerDatosConversacion(textoUsuario) {
     _escribirMemoria(memoria);
   }
 }
+
+/**
+ * Respaldo de ciclo de vida para móviles.
+ * Chrome/Android y Safari/iOS pueden suspender o matar pestañas sin disparar
+ * beforeunload/unload. La persistencia principal ya ocurre en tiempo real,
+ * pero al ocultarse la pestaña actualizamos metadatos de sesión inmediatamente.
+ */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden') return;
+
+  const memoria = _leerMemoria();
+  if (!memoria) return;
+
+  memoria.sesion.ultimaSesion = new Date().toISOString();
+  _escribirMemoria(memoria);
+});
 
 // ── 8.5 API PÚBLICA: LECTURA Y CONTEXTO ───────────────
 
